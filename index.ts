@@ -7,6 +7,7 @@
  * Usage:
  *   /browser connect [port]   - attach to running browser (default port 9222)
  *   /browser launch           - launch a new Chromium instance
+ *   /browser isolated         - launch a fresh, non-persistent browser context
  *   /browser status           - show connection + open tabs
  *   /browser disconnect       - release the browser connection
  *
@@ -22,9 +23,12 @@
  *   browser_close, browser_resize
  */
 
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import type { ExtensionAPI, ExtensionCommandContext } from '@earendil-works/pi-coding-agent';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { Type } from 'typebox';
-import { BrowserSession } from './src/browser-session';
+import { BrowserSession, parseBrowserName } from './src/browser-session';
+import type { ConnectionMode } from './src/browser-session';
 import { BrowserToolResult } from './src/response';
 import type { Context } from './src/context';
 import type { Tool } from './src/tool';
@@ -64,6 +68,25 @@ function makeTool(session: BrowserSession, tool: Tool) {
 
 export default function (pi: ExtensionAPI) {
   const session = new BrowserSession();
+  const extensionDir = dirname(fileURLToPath(import.meta.url));
+  const playwrightCli = join(extensionDir, 'node_modules', 'playwright', 'cli.js');
+  const browserConfig = { timeouts: { action: 10000, navigation: 30000 } };
+
+  async function connectBrowser(mode: ConnectionMode, ctx: ExtensionCommandContext): Promise<void> {
+    await session.connect(mode, browserConfig, async (browserName) => {
+      ctx.ui.notify(`Installing Playwright's matching ${browserName} browser...`, 'warning');
+      const result = await pi.exec(
+        process.execPath,
+        [playwrightCli, 'install', browserName],
+        { cwd: extensionDir, timeout: 600000 },
+      );
+      if (result.code !== 0) {
+        const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${result.code}`;
+        throw new Error(`Failed to install Playwright ${browserName}: ${detail}`);
+      }
+      ctx.ui.notify(`Installed Playwright ${browserName}; retrying launch...`, 'info');
+    });
+  }
 
   // Collect all tool implementations indexed by name
   const toolMap = new Map<string, Tool>();
@@ -643,7 +666,7 @@ export default function (pi: ExtensionAPI) {
   // ---------- /browser command ----------
 
   pi.registerCommand('browser', {
-    description: 'Manage browser connection: connect [port], launch [browser], status, disconnect',
+    description: 'Manage browser connection: connect [port], launch [browser], isolated [browser], status, disconnect',
     handler: async (args, ctx) => {
       const parts = (args ?? '').trim().split(/\s+/).filter(Boolean);
       const sub = parts[0];
@@ -675,13 +698,25 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (sub === 'launch') {
-        const browserName = (parts[1] ?? 'chromium') as 'chromium' | 'firefox' | 'webkit';
-        ctx.ui.notify(`Launching ${browserName}...`, 'info');
         try {
-          await session.connect({ type: 'launch', browserName }, { timeouts: { action: 10000, navigation: 30000 } });
+          const browserName = parseBrowserName(parts[1]);
+          ctx.ui.notify(`Launching ${browserName}...`, 'info');
+          await connectBrowser({ type: 'launch', browserName }, ctx);
           ctx.ui.notify(`Launched ${browserName}.`, 'info');
         } catch (e: any) {
           ctx.ui.notify(`Launch failed: ${e.message}`, 'error');
+        }
+        return;
+      }
+
+      if (sub === 'isolated') {
+        try {
+          const browserName = parseBrowserName(parts[1]);
+          ctx.ui.notify(`Launching isolated ${browserName}...`, 'info');
+          await connectBrowser({ type: 'isolated', browserName }, ctx);
+          ctx.ui.notify(`Launched isolated ${browserName}.`, 'info');
+        } catch (e: any) {
+          ctx.ui.notify(`Isolated launch failed: ${e.message}`, 'error');
         }
         return;
       }
@@ -693,7 +728,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       ctx.ui.notify(
-        'Usage: /browser [connect [port] | launch [chromium|firefox|webkit] | status | disconnect]',
+        'Usage: /browser [connect [port] | launch [chromium|firefox|webkit] | isolated [chromium|firefox|webkit] | status | disconnect]',
         'info'
       );
     },

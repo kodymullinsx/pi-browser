@@ -2,7 +2,7 @@
 
 A pi extension that gives the agent a real browser, backed by Playwright.
 
-Connect to your running Chromium-based browser via CDP, or let the extension launch one; once connected, you get 50+ tools covering navigation, clicking, typing, form filling, screenshots, tab management, cookie manipulation, network interception, localStorage, console messages, dialogs, and file upload.
+Connect to your running Chromium-based browser via CDP, let the extension launch a persistent context, or start a fresh isolated context; once connected, you get 50+ tools covering navigation, clicking, typing, form filling, screenshots, tab management, cookie manipulation, network interception, localStorage, console messages, dialogs, and file upload.
 
 The main thing that makes this different from other pi browser tools is that it attaches to a browser that's already open. You're looking at a page, you tell pi to interact with it, and it does, without a separate browser window or starting fresh.
 
@@ -10,12 +10,13 @@ The main thing that makes this different from other pi browser tools is that it 
 
 ```bash
 cd ~/.pi/agent/extensions
-git clone https://github.com/larsderidder/pi-browser
-cd pi-browser
+git clone https://github.com/larsderidder/pi-browser browser-control
+cd browser-control
 npm install
+npx --no-install playwright install chromium
 ```
 
-Pi picks up the extension on next launch.
+Pi picks up the extension on next launch. If a matching browser binary is later missing after a Playwright update, `/browser launch` installs that browser revision and retries once automatically.
 
 ## Browser setup
 
@@ -61,11 +62,15 @@ If you run multiple browsers at the same time, give each a different port. Two b
 /browser connect        # attach to browser on port 9222 (default)
 /browser connect 9223   # attach on a specific port
 /browser launch         # launch a new Chromium instance
+/browser isolated       # launch a fresh, non-persistent Chromium context
+/browser isolated firefox
 /browser status         # show connection and open tabs
 /browser disconnect
 ```
 
 Once connected, the browser tools are available for the rest of the session.
+
+`isolated` starts a new browser with a fresh in-memory context rather than attaching to a signed-in profile or using a persistent context. It retains the same complete browser tool surface for that session.
 
 ## Tools
 

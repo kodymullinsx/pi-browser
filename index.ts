@@ -1,5 +1,5 @@
 /**
- * pi-browser extension
+ * browser-control extension
  *
  * Gives pi browser automation tools backed directly by Playwright.
  * Connect to your running Chromium-based browser via CDP, or launch a new one.
@@ -44,6 +44,7 @@ import waitTools from './src/tools/wait';
 import commonTools from './src/tools/common';
 import mouseTools from './src/tools/mouse';
 import consoleTools from './src/tools/console';
+import devtoolsTools from './src/tools/devtools';
 import dialogTools from './src/tools/dialogs';
 import fileTools from './src/tools/files';
 import networkTools from './src/tools/network';
@@ -93,7 +94,7 @@ export default function (pi: ExtensionAPI) {
   for (const t of [
     ...navigateTools, ...snapshotTools, ...keyboardTools, ...formTools,
     ...screenshotTools, ...tabTools, ...evaluateTools, ...waitTools, ...commonTools,
-    ...mouseTools, ...consoleTools, ...dialogTools, ...fileTools,
+    ...mouseTools, ...consoleTools, ...devtoolsTools, ...dialogTools, ...fileTools,
     ...networkTools, ...routeTools, ...cookieTools, ...webstorageTools, ...storageTools,
   ]) {
     toolMap.set(t.schema.name, t);
@@ -458,6 +459,33 @@ export default function (pi: ExtensionAPI) {
     description: 'Clear recorded console messages',
     parameters: Type.Object({}),
     async execute(_id, params) { const r = await run('browser_console_clear')(params as Params); return { content: r.content as any, details: r.details }; },
+  });
+
+  // ---------- DevTools ----------
+
+  pi.registerTool({
+    name: 'browser_devtools',
+    label: 'Browser DevTools',
+    description: 'Get browser info or page metrics, or monitor runtime exceptions, network failures, and page lifecycle events.',
+    parameters: Type.Object({
+      action: Type.Union([
+        Type.Literal('info'),
+        Type.Literal('metrics'),
+        Type.Literal('monitor_start'),
+        Type.Literal('monitor_read'),
+        Type.Literal('monitor_stop'),
+      ], { description: 'DevTools operation to perform' }),
+      signals: Type.Optional(Type.Array(Type.Union([
+        Type.Literal('runtime'),
+        Type.Literal('network-failures'),
+        Type.Literal('lifecycle'),
+      ]), { description: 'monitor_start signals; defaults to all three', maxItems: 3 })),
+      monitorId: Type.Optional(Type.String({ description: 'Monitor ID returned by monitor_start' })),
+      maxEvents: Type.Optional(Type.Integer({ description: 'monitor_start ring-buffer size (default 200)', minimum: 1, maximum: 1000 })),
+      limit: Type.Optional(Type.Integer({ description: 'monitor_read maximum events (default 100)', minimum: 1, maximum: 500 })),
+      clear: Type.Optional(Type.Boolean({ description: 'monitor_read: remove returned events from the buffer' })),
+    }),
+    async execute(_id, params) { const r = await run('browser_devtools')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
   // ---------- Dialogs ----------

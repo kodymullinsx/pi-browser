@@ -74,7 +74,6 @@ export class BrowserSession {
         const allTargets: CdpTarget[] = await resp.json();
 
         this._context = new Context(contexts, config, { port: mode.port, allTargets });
-        this._browser.on('disconnected', () => { this._browser = null; this._context = null; });
         break;
       }
 
@@ -104,6 +103,16 @@ export class BrowserSession {
         break;
       }
     }
+
+    const browser = this._browser;
+    const context = this._context;
+    browser.on('disconnected', () => {
+      if (this._browser !== browser) return;
+      this._browser = null;
+      if (this._context !== context) return;
+      this._context = null;
+      void context.dispose().catch(() => {});
+    });
   }
 
   async disconnect(): Promise<void> {

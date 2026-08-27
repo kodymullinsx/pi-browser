@@ -9,6 +9,7 @@ const playwright = vi.hoisted(() => {
   const browser = {
     close: vi.fn(async () => {}),
     isConnected: vi.fn(() => true),
+    on: vi.fn(),
   };
   browserContext.browser.mockReturnValue(browser);
   return {
@@ -41,8 +42,9 @@ type BrowserCommand = {
 function loadExtension(execResult: { stdout: string; stderr: string; code: number; killed: boolean }) {
   let command: BrowserCommand | undefined;
   const exec = vi.fn(async () => execResult);
+  const registerTool = vi.fn();
   const pi = {
-    registerTool: vi.fn(),
+    registerTool,
     registerCommand: vi.fn((name: string, definition: BrowserCommand) => {
       if (name === 'browser') command = definition;
     }),
@@ -53,11 +55,23 @@ function loadExtension(execResult: { stdout: string; stderr: string; code: numbe
 
   const notify = vi.fn();
   const ctx = { ui: { notify } };
-  return { command: command!, ctx, exec, notify };
+  return { command: command!, ctx, exec, notify, registerTool };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe('browser-control registration', () => {
+  it('registers one compact browser_devtools surface', () => {
+    const { registerTool } = loadExtension({ stdout: '', stderr: '', code: 0, killed: false });
+
+    const matches = registerTool.mock.calls
+      .map(([definition]) => definition)
+      .filter(definition => definition.name === 'browser_devtools');
+
+    expect(matches).toHaveLength(1);
+  });
 });
 
 describe('/browser launch provisioning', () => {

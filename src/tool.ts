@@ -1,5 +1,5 @@
 /**
- * Internal Tool type definitions for pi-browser.
+ * Internal Tool type definitions for browser-control.
  * Mirrors the structure from playwright-core/src/tools/backend/tool.ts
  * but without any MCP or zod dependency.
  */

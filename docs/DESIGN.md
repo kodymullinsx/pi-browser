@@ -1,4 +1,4 @@
-# pi-browser extension design
+# browser-control extension design
 
 ## Background
 
@@ -114,7 +114,9 @@ The `handle()` function bodies are unchanged. Only the TypeBox schema declaratio
 - `screenshot.ts` - Instead of saving to file and returning a link, return base64 image content
   directly to pi so it renders inline in the TUI.
 
-### Drop for v1
+### Original v1 deferrals (historical)
+
+Several of these capabilities were added after the original v1 cut; this list records the initial scope decision rather than the current tool inventory.
 
 - `mouse.ts` - Raw coordinate mouse actions (scroll, move). Useful but not essential.
 - `network.ts` / `route.ts` - Request inspection and mocking. Dev use, not browsing.
@@ -127,8 +129,8 @@ The `handle()` function bodies are unchanged. Only the TypeBox schema declaratio
 ## File structure
 
 ```
-~/.pi/agent/extensions/browser/
-├── package.json              npm package: declares playwright dep, pi entry point
+~/.pi/agent/extensions/browser-control/
+├── package.json              private local package: declares Playwright and the Pi entry point
 ├── DESIGN.md                 this file
 ├── index.ts                  pi extension entry: registers tools + /browser command
 ├── browser-session.ts        manages Browser + Context lifecycle, CDP connect/disconnect
@@ -187,20 +189,14 @@ After `connect`, all `browser_*` tools become active. Before connect they return
 
 - CDP attach works with Chromium-family only (Chrome, Brave, Chromium, Edge, Opera)
 - Launch mode can use Firefox or WebKit too (Playwright manages its own browser)
-- For Lars's use case: launch target browser with `--remote-debugging-port=9222` once,
+- For the local use case: launch target browser with `--remote-debugging-port=9222` once,
   or add it to a browser launcher alias
 
-## Open-source packaging
+## Local package ownership
 
-The design keeps pi-specific code isolated to `index.ts` and `browser-session.ts`.
-All tool files depend only on `Context`, `Tab`, `Response` (internal) and `playwright` (npm).
+The canonical runtime is the private checkout at `~/.pi/agent/extensions/browser-control`. Pi loads `index.ts` directly from that global extension directory; this extension is not installed or published through npm or Pi package settings. Its local `package.json` exists only to declare Playwright, development dependencies, and the Pi entry point.
 
-To open source:
-1. Move to a standalone repo
-2. Publish as `pi-browser` on npm
-3. Users install via pi's package mechanism (`settings.json` packages array)
-
-## Sizing
+## Original sizing estimate
 
 | Component | Lines |
 |-----------|-------|

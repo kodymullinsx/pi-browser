@@ -1,22 +1,22 @@
-# pi-browser
+# browser-control
 
-A pi extension that gives the agent a real browser, backed by Playwright.
+A private, local Pi extension that gives the agent a real browser backed by Playwright.
 
 Connect to your running Chromium-based browser via CDP, let the extension launch a persistent context, or start a fresh isolated context; once connected, you get 50+ tools covering navigation, clicking, typing, form filling, screenshots, tab management, cookie manipulation, network interception, localStorage, console messages, dialogs, and file upload.
 
 The main thing that makes this different from other pi browser tools is that it attaches to a browser that's already open. You're looking at a page, you tell pi to interact with it, and it does, without a separate browser window or starting fresh.
 
-## Install
+## Local installation
+
+The canonical live checkout is `~/.pi/agent/extensions/browser-control`. It is private and is not installed or published as an npm or Pi package. npm is used only to install the extension's local Playwright runtime and development dependencies.
 
 ```bash
-cd ~/.pi/agent/extensions
-git clone https://github.com/larsderidder/pi-browser browser-control
-cd browser-control
+cd ~/.pi/agent/extensions/browser-control
 npm install
 npx --no-install playwright install chromium
 ```
 
-Pi picks up the extension on next launch. If a matching browser binary is later missing after a Playwright update, `/browser launch` installs that browser revision and retries once automatically.
+Pi auto-discovers the extension from this global extension directory; the local-model launcher also loads `index.ts` explicitly. If a matching browser binary is later missing after a Playwright update, `/browser launch` installs that browser revision and retries once automatically.
 
 ## Browser setup
 
@@ -126,6 +126,12 @@ Once connected, the browser tools are available for the rest of the session.
 | `browser_console_clear` | Clear the console message buffer |
 | `browser_handle_dialog` | Accept or dismiss an alert/confirm/prompt dialog |
 
+### DevTools
+
+| Tool | Description |
+|------|-------------|
+| `browser_devtools` | Read Chromium metadata or performance metrics, or monitor bounded runtime, network-failure, and lifecycle events |
+
 ### Network
 
 | Tool | Description |
@@ -171,7 +177,7 @@ Once connected, the browser tools are available for the rest of the session.
 
 ## Notes
 
-- Only Chromium-based browsers support CDP attach. Firefox doesn't expose the CDP protocol.
+- Only Chromium-based browsers support CDP attach and `browser_devtools`. Firefox doesn't expose the CDP protocol.
 - Tabs in separate browser windows show up in `browser_tabs` with a warning. Selecting one navigates your current tab to that URL rather than controlling the original window directly; that's a Playwright CDP limitation.
 - Browser extensions (Bitwarden etc.) run in an isolated context that CDP can't reach.
 

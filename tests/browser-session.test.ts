@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const playwright = vi.hoisted(() => {
+  const browserListeners = new Map<string, Array<() => void>>();
   const browserContext = {
     pages: vi.fn(() => []),
     on: vi.fn(),
@@ -10,18 +11,36 @@ const playwright = vi.hoisted(() => {
     close: vi.fn(async () => {}),
     isConnected: vi.fn(() => true),
     newContext: vi.fn(async () => browserContext),
+    contexts: vi.fn(() => [browserContext]),
+    on: vi.fn((event: string, listener: () => void) => {
+      const listeners = browserListeners.get(event) ?? [];
+      listeners.push(listener);
+      browserListeners.set(event, listeners);
+    }),
+    emit: (event: string) => {
+      for (const listener of browserListeners.get(event) ?? []) listener();
+    },
   };
   browserContext.browser.mockReturnValue(browser);
   const chromiumLaunch = vi.fn(async () => browser);
   const chromiumLaunchPersistentContext = vi.fn(async () => browserContext);
-  return { browser, browserContext, chromiumLaunch, chromiumLaunchPersistentContext };
+  const chromiumConnectOverCDP = vi.fn(async () => browser);
+  const resetBrowserListeners = () => browserListeners.clear();
+  return {
+    browser,
+    browserContext,
+    chromiumLaunch,
+    chromiumLaunchPersistentContext,
+    chromiumConnectOverCDP,
+    resetBrowserListeners,
+  };
 });
 
 vi.mock('playwright', () => ({
   chromium: {
     launch: playwright.chromiumLaunch,
     launchPersistentContext: playwright.chromiumLaunchPersistentContext,
-    connectOverCDP: vi.fn(),
+    connectOverCDP: playwright.chromiumConnectOverCDP,
   },
   firefox: { launch: vi.fn(), launchPersistentContext: vi.fn() },
   webkit: { launch: vi.fn(), launchPersistentContext: vi.fn() },
@@ -31,6 +50,8 @@ import { BrowserSession, parseBrowserName } from '../src/browser-session';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  playwright.resetBrowserListeners();
+  vi.stubGlobal('fetch', vi.fn(async () => ({ json: async () => [] })));
 });
 
 describe('parseBrowserName', () => {
@@ -45,6 +66,21 @@ describe('parseBrowserName', () => {
     expect(() => parseBrowserName('safari')).toThrow(
       'Unsupported browser "safari". Choose chromium, firefox, or webkit.',
     );
+  });
+});
+
+describe('BrowserSession CDP disconnect', () => {
+  it('disposes the context after an unexpected browser disconnect', async () => {
+    const session = new BrowserSession();
+    await session.connect({ type: 'cdp', port: 9222 });
+    const context = session.context!;
+    const dispose = vi.spyOn(context, 'dispose').mockResolvedValue();
+
+    playwright.browser.emit('disconnected');
+    await vi.waitFor(() => expect(dispose).toHaveBeenCalledOnce());
+
+    expect(session.context).toBeNull();
+    expect(session.status()).toBe('disconnected');
   });
 });
 

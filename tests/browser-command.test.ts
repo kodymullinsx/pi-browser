@@ -72,6 +72,17 @@ describe('browser-control registration', () => {
 
     expect(matches).toHaveLength(1);
   });
+
+  it('keeps snapshot guidance in the tool description rather than system-prompt metadata', () => {
+    const { registerTool } = loadExtension({ stdout: '', stderr: '', code: 0, killed: false });
+    const snapshot = registerTool.mock.calls
+      .map(([definition]) => definition)
+      .find(definition => definition.name === 'browser_snapshot');
+
+    expect(snapshot.description).toContain('check the snapshot included in action responses');
+    expect(snapshot).not.toHaveProperty('promptGuidelines');
+    expect(snapshot).not.toHaveProperty('promptSnippet');
+  });
 });
 
 describe('/browser launch provisioning', () => {

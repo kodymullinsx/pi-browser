@@ -146,11 +146,6 @@ export default function (pi: ExtensionAPI) {
     name: 'browser_snapshot',
     label: 'Page snapshot',
     description: 'Capture the accessibility tree of the current page to find element refs for interaction. Do NOT call after every action to confirm results — check the snapshot included in action responses instead. Use selector param to scope to a specific section if the page is large.',
-    promptGuidelines: [
-      'Call browser_snapshot only when you need to find an element ref to interact with, not to confirm results.',
-      'Action tools (browser_click, browser_type, etc.) already include a snapshot in their response — do not call browser_snapshot again afterwards.',
-      'If the snapshot is too large, re-call with a selector scoped to the relevant section of the page.',
-    ],
     parameters: Type.Object({
       selector: Type.Optional(Type.String({ description: 'CSS selector for partial snapshot' })),
     }) as any,

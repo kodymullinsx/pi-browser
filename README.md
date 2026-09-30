@@ -18,6 +18,29 @@ npx --no-install playwright install chromium
 
 Pi auto-discovers the extension from this global extension directory; the local-model launcher also loads `index.ts` explicitly. If a matching browser binary is later missing after a Playwright update, `/browser launch` installs that browser revision and retries once automatically.
 
+## Validation
+
+```bash
+npm test                 # Live-version guard, TypeScript check, unit tests
+npm run test:loader      # Fresh installed Pi CLI; registration only, no browser/provider access
+```
+
+The Pi development dependency is pinned to the exact live harness version. The guard
+compares the active CLI and its owning package with the declaration package actually
+resolved by TypeScript using `tsconfig.json`. It ignores npm-injected `node_modules/.bin`
+paths so `npm test` cannot accidentally compare the local Pi copy with itself.
+
+After a harness upgrade, align the dependency explicitly and rerun both commands:
+
+```bash
+npm install --save-dev --save-exact --ignore-scripts @earendil-works/pi-coding-agent@<live-version>
+```
+
+The canonical parent integration suite includes `test:loader`, which also runs the
+version guard. Matching versions and successful registration do not prove browser
+connectivity, signed-in state, or Playwright actions. Those require separate authorized
+browser acceptance tests.
+
 ## Browser setup
 
 Any Chromium-based browser works: Chrome, Chromium, Brave, Edge, Opera, Arc, Vivaldi. You need to launch it with `--remote-debugging-port=<port>` so pi can attach. The port number is up to you; 9222 is conventional.

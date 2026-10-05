@@ -1,8 +1,7 @@
 import { defineTabTool } from '../tool';
 
 export const mouseMove = defineTabTool({
-  capability: 'vision',
-  schema: { name: 'browser_mouse_move_xy', title: 'Move mouse', description: 'Move mouse to an absolute x/y coordinate', type: 'input' },
+  schema: { name: 'browser_mouse_move_xy' },
   handle: async (tab, params, result) => {
     await tab.waitForCompletion(async () => { await tab.page.mouse.move(params.x, params.y); });
     result.addCode(`await page.mouse.move(${params.x}, ${params.y});`);
@@ -10,8 +9,7 @@ export const mouseMove = defineTabTool({
 });
 
 export const mouseDown = defineTabTool({
-  capability: 'vision',
-  schema: { name: 'browser_mouse_down', title: 'Mouse down', description: 'Press mouse button down', type: 'input' },
+  schema: { name: 'browser_mouse_down' },
   handle: async (tab, params, result) => {
     const opts = params.button ? { button: params.button } : {};
     await tab.page.mouse.down(opts);
@@ -20,8 +18,7 @@ export const mouseDown = defineTabTool({
 });
 
 export const mouseUp = defineTabTool({
-  capability: 'vision',
-  schema: { name: 'browser_mouse_up', title: 'Mouse up', description: 'Release mouse button', type: 'input' },
+  schema: { name: 'browser_mouse_up' },
   handle: async (tab, params, result) => {
     const opts = params.button ? { button: params.button } : {};
     await tab.page.mouse.up(opts);
@@ -30,8 +27,7 @@ export const mouseUp = defineTabTool({
 });
 
 export const mouseWheel = defineTabTool({
-  capability: 'vision',
-  schema: { name: 'browser_mouse_wheel', title: 'Scroll mouse wheel', description: 'Scroll the mouse wheel by deltaX/deltaY pixels', type: 'input' },
+  schema: { name: 'browser_mouse_wheel' },
   handle: async (tab, params, result) => {
     await tab.page.mouse.wheel(params.deltaX ?? 0, params.deltaY ?? 0);
     result.addCode(`await page.mouse.wheel(${params.deltaX ?? 0}, ${params.deltaY ?? 0});`);
@@ -39,8 +35,7 @@ export const mouseWheel = defineTabTool({
 });
 
 export const mouseClickXY = defineTabTool({
-  capability: 'vision',
-  schema: { name: 'browser_mouse_click_xy', title: 'Click at coordinates', description: 'Click at an absolute x/y coordinate. Use browser_click with a ref/selector when possible.', type: 'input' },
+  schema: { name: 'browser_mouse_click_xy' },
   handle: async (tab, params, result) => {
     const opts: Record<string, any> = {};
     if (params.button) opts.button = params.button;
@@ -53,8 +48,7 @@ export const mouseClickXY = defineTabTool({
 });
 
 export const mouseDragXY = defineTabTool({
-  capability: 'vision',
-  schema: { name: 'browser_mouse_drag_xy', title: 'Drag between coordinates', description: 'Drag from one x/y coordinate to another', type: 'input' },
+  schema: { name: 'browser_mouse_drag_xy' },
   handle: async (tab, params, result) => {
     await tab.waitForCompletion(async () => {
       await tab.page.mouse.move(params.startX, params.startY);

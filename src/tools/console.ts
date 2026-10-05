@@ -6,13 +6,7 @@ type Level = typeof LEVELS[number];
 function levelIndex(l: Level): number { return LEVELS.indexOf(l); }
 
 export const consoleMessages = defineTabTool({
-  capability: 'core',
-  schema: {
-    name: 'browser_console_messages',
-    title: 'Get console messages',
-    description: 'Return console messages from the current page. Useful for debugging errors and failed requests.',
-    type: 'readOnly',
-  },
+  schema: { name: 'browser_console_messages' },
   handle: async (tab, params, result) => {
     const level: Level = params.level ?? 'info';
     const threshold = levelIndex(level);
@@ -33,8 +27,7 @@ export const consoleMessages = defineTabTool({
 });
 
 export const consoleClear = defineTabTool({
-  capability: 'core',
-  schema: { name: 'browser_console_clear', title: 'Clear console messages', description: 'Clear recorded console messages', type: 'action' },
+  schema: { name: 'browser_console_clear' },
   handle: async (tab, _params, result) => {
     tab.clearConsoleMessages();
     result.addTextResult('Console messages cleared.');

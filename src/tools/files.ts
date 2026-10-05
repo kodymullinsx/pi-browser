@@ -1,13 +1,7 @@
 import { defineTabTool } from '../tool';
 
 export const fileUpload = defineTabTool({
-  capability: 'core',
-  schema: {
-    name: 'browser_file_upload',
-    title: 'Upload files',
-    description: 'Upload one or more files via an open file chooser dialog. Call after a file input is triggered.',
-    type: 'action',
-  },
+  schema: { name: 'browser_file_upload' },
   handle: async (tab, params, result) => {
     const state = tab.modalStates().find(s => s.type === 'fileChooser');
     if (!state || state.type !== 'fileChooser')

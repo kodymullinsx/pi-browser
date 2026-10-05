@@ -2,13 +2,7 @@ import fs from 'node:fs';
 import { defineTool } from '../tool';
 
 export const storageState = defineTool({
-  capability: 'storage',
-  schema: {
-    name: 'browser_storage_state',
-    title: 'Save storage state',
-    description: 'Save cookies and localStorage to a JSON file for later reuse with browser_set_storage_state',
-    type: 'readOnly',
-  },
+  schema: { name: 'browser_storage_state' },
   handle: async (context, params, result) => {
     const state = await context.browserContext().storageState();
     const json = JSON.stringify(state, null, 2);
@@ -20,13 +14,7 @@ export const storageState = defineTool({
 });
 
 export const setStorageState = defineTool({
-  capability: 'storage',
-  schema: {
-    name: 'browser_set_storage_state',
-    title: 'Restore storage state',
-    description: 'Restore cookies and localStorage from a file previously saved with browser_storage_state',
-    type: 'action',
-  },
+  schema: { name: 'browser_set_storage_state' },
   handle: async (context, params, result) => {
     await context.browserContext().addCookies(
       JSON.parse(await fs.promises.readFile(params.filename, 'utf-8')).cookies ?? []

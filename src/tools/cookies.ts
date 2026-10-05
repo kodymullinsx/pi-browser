@@ -1,8 +1,7 @@
 import { defineTool } from '../tool';
 
 export const cookieList = defineTool({
-  capability: 'storage',
-  schema: { name: 'browser_cookie_list', title: 'List cookies', description: 'List all cookies, optionally filtered by domain or path', type: 'readOnly' },
+  schema: { name: 'browser_cookie_list' },
   handle: async (context, params, result) => {
     let cookies = await context.browserContext().cookies();
     if (params.domain) cookies = cookies.filter(c => c.domain.includes(params.domain));
@@ -14,8 +13,7 @@ export const cookieList = defineTool({
 });
 
 export const cookieGet = defineTool({
-  capability: 'storage',
-  schema: { name: 'browser_cookie_get', title: 'Get cookie', description: 'Get a specific cookie by name', type: 'readOnly' },
+  schema: { name: 'browser_cookie_get' },
   handle: async (context, params, result) => {
     const cookies = await context.browserContext().cookies();
     const c = cookies.find(c => c.name === params.name);
@@ -26,8 +24,7 @@ export const cookieGet = defineTool({
 });
 
 export const cookieSet = defineTool({
-  capability: 'storage',
-  schema: { name: 'browser_cookie_set', title: 'Set cookie', description: 'Set a cookie', type: 'action' },
+  schema: { name: 'browser_cookie_set' },
   handle: async (context, params, result) => {
     const tab = await context.ensureTab();
     const url = new URL(tab.page.url());
@@ -48,8 +45,7 @@ export const cookieSet = defineTool({
 });
 
 export const cookieDelete = defineTool({
-  capability: 'storage',
-  schema: { name: 'browser_cookie_delete', title: 'Delete cookie', description: 'Delete a specific cookie by name', type: 'action' },
+  schema: { name: 'browser_cookie_delete' },
   handle: async (context, params, result) => {
     await context.browserContext().clearCookies({ name: params.name });
     result.addTextResult(`Cookie '${params.name}' deleted.`);
@@ -58,8 +54,7 @@ export const cookieDelete = defineTool({
 });
 
 export const cookieClear = defineTool({
-  capability: 'storage',
-  schema: { name: 'browser_cookie_clear', title: 'Clear cookies', description: 'Clear all cookies', type: 'action' },
+  schema: { name: 'browser_cookie_clear' },
   handle: async (context, _params, result) => {
     await context.browserContext().clearCookies();
     result.addTextResult('All cookies cleared.');

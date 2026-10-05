@@ -3,13 +3,7 @@ import type * as pw from 'playwright';
 import type { RouteEntry } from '../context';
 
 export const route = defineTool({
-  capability: 'network',
-  schema: {
-    name: 'browser_route',
-    title: 'Mock network requests',
-    description: 'Intercept and mock network requests matching a URL pattern',
-    type: 'action',
-  },
+  schema: { name: 'browser_route' },
   handle: async (context, params, result) => {
     const addHeaders = params.headers
       ? Object.fromEntries((params.headers as string[]).map((h: string) => {
@@ -49,8 +43,7 @@ export const route = defineTool({
 });
 
 export const routeList = defineTool({
-  capability: 'network',
-  schema: { name: 'browser_route_list', title: 'List routes', description: 'List all active network routes', type: 'readOnly' },
+  schema: { name: 'browser_route_list' },
   handle: async (context, _params, result) => {
     const routes = context.routes();
     if (!routes.length) { result.addTextResult('No active routes.'); return; }
@@ -59,8 +52,7 @@ export const routeList = defineTool({
 });
 
 export const unroute = defineTool({
-  capability: 'network',
-  schema: { name: 'browser_unroute', title: 'Remove routes', description: 'Remove network routes matching a pattern, or all routes if no pattern given', type: 'action' },
+  schema: { name: 'browser_unroute' },
   handle: async (context, params, result) => {
     const removed = await context.removeRoute(params.pattern);
     result.addTextResult(`Removed ${removed} route(s)${params.pattern ? ` for pattern: ${params.pattern}` : ''}.`);

@@ -1,13 +1,7 @@
 import { defineTool } from '../tool';
 
 export const waitFor = defineTool({
-  capability: 'core',
-  schema: {
-    name: 'browser_wait_for',
-    title: 'Wait for',
-    description: 'Wait for text to appear or disappear, or wait a specified number of seconds',
-    type: 'assertion',
-  },
+  schema: { name: 'browser_wait_for' },
   handle: async (context, params, result) => {
     if (!params.text && !params.textGone && !params.time)
       throw new Error('Provide at least one of: time, text, textGone');

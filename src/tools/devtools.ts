@@ -9,13 +9,7 @@ function requiredMonitorId(params: Record<string, any>): string {
 }
 
 export const devtools = defineTool({
-  capability: 'devtools',
-  schema: {
-    name: 'browser_devtools',
-    title: 'Inspect browser DevTools data',
-    description: 'Read browser metadata or page performance metrics, or start/read/stop a bounded monitor for runtime exceptions, network failures, and page lifecycle events.',
-    type: 'action',
-  },
+  schema: { name: 'browser_devtools' },
   handle: async (context, params, result) => {
     const manager = context.devtools();
     let value: unknown;

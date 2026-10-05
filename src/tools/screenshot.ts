@@ -1,13 +1,7 @@
 import { defineTabTool } from '../tool';
 
 export const screenshot = defineTabTool({
-  capability: 'core',
-  schema: {
-    name: 'browser_take_screenshot',
-    title: 'Take a screenshot',
-    description: "Take a screenshot of the current page. You can't interact based on screenshots; use browser_snapshot for that.",
-    type: 'readOnly',
-  },
+  schema: { name: 'browser_take_screenshot' },
   handle: async (tab, params, result) => {
     const imageType: 'png' | 'jpeg' = params.type === 'jpeg' ? 'jpeg' : 'png';
     const options: Record<string, any> = {

@@ -3,18 +3,7 @@ import { defineTool, defineTabTool } from '../tool';
 const MAX_SNAPSHOT_BYTES = 20_000;
 
 export const snapshot = defineTool({
-  capability: 'core',
-  schema: {
-    name: 'browser_snapshot',
-    title: 'Page snapshot',
-    description: [
-      'Capture the accessibility tree of the current page to identify elements for interaction.',
-      'Use this to find element refs before clicking, typing, or filling forms.',
-      'Do NOT call this after every action to confirm results — check the snapshot included in action responses instead.',
-      'Output is truncated to ~20KB. Use the selector param to scope to a specific part of the page if the full snapshot is too large.',
-    ].join(' '),
-    type: 'readOnly',
-  },
+  schema: { name: 'browser_snapshot' },
   handle: async (context, params, result) => {
     await context.ensureTab();
     const tab = context.currentTabOrDie();
@@ -36,13 +25,7 @@ export const snapshot = defineTool({
 });
 
 export const click = defineTabTool({
-  capability: 'core',
-  schema: {
-    name: 'browser_click',
-    title: 'Click',
-    description: 'Perform a click on a web page element',
-    type: 'input',
-  },
+  schema: { name: 'browser_click' },
   handle: async (tab, params, result) => {
     const { locator, resolved } = await tab.refLocator(params);
     const options: Record<string, any> = {};
@@ -65,13 +48,7 @@ export const click = defineTabTool({
 });
 
 export const hover = defineTabTool({
-  capability: 'core',
-  schema: {
-    name: 'browser_hover',
-    title: 'Hover mouse',
-    description: 'Hover over an element on the page',
-    type: 'input',
-  },
+  schema: { name: 'browser_hover' },
   handle: async (tab, params, result) => {
     const { locator, resolved } = await tab.refLocator(params);
     await tab.waitForCompletion(() => locator.hover(tab.actionTimeoutOptions));
@@ -81,13 +58,7 @@ export const hover = defineTabTool({
 });
 
 export const selectOption = defineTabTool({
-  capability: 'core',
-  schema: {
-    name: 'browser_select_option',
-    title: 'Select option',
-    description: 'Select an option in a dropdown',
-    type: 'input',
-  },
+  schema: { name: 'browser_select_option' },
   handle: async (tab, params, result) => {
     const { locator, resolved } = await tab.refLocator(params);
     await tab.waitForCompletion(async () => { await locator.selectOption(params.values, tab.actionTimeoutOptions); });
@@ -97,13 +68,7 @@ export const selectOption = defineTabTool({
 });
 
 export const drag = defineTabTool({
-  capability: 'core',
-  schema: {
-    name: 'browser_drag',
-    title: 'Drag mouse',
-    description: 'Perform drag and drop between two elements',
-    type: 'input',
-  },
+  schema: { name: 'browser_drag' },
   handle: async (tab, params, result) => {
     const start = await tab.refLocator({ ref: params.startRef, selector: params.startSelector, element: params.startElement });
     const end = await tab.refLocator({ ref: params.endRef, selector: params.endSelector, element: params.endElement });

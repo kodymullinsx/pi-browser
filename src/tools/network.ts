@@ -32,13 +32,7 @@ async function renderRequest(req: pw.Request, includeBody: boolean, includeHeade
 }
 
 export const networkRequests = defineTabTool({
-  capability: 'core',
-  schema: {
-    name: 'browser_network_requests',
-    title: 'List network requests',
-    description: 'List network requests made by the current page since last navigation. Useful for debugging API calls and failed requests.',
-    type: 'readOnly',
-  },
+  schema: { name: 'browser_network_requests' },
   handle: async (tab, params, result) => {
     const allReqs = tab.requests();
     const filter = params.filter ? new RegExp(params.filter) : undefined;
@@ -57,8 +51,7 @@ export const networkRequests = defineTabTool({
 });
 
 export const networkClear = defineTabTool({
-  capability: 'core',
-  schema: { name: 'browser_network_clear', title: 'Clear network requests', description: 'Clear recorded network requests', type: 'action' },
+  schema: { name: 'browser_network_clear' },
   handle: async (tab, _params, result) => {
     tab.clearRequests();
     result.addTextResult('Network requests cleared.');
@@ -66,13 +59,7 @@ export const networkClear = defineTabTool({
 });
 
 export const networkStateSet = defineTool({
-  capability: 'network',
-  schema: {
-    name: 'browser_network_state_set',
-    title: 'Set network state',
-    description: 'Set the browser to online or offline mode',
-    type: 'action',
-  },
+  schema: { name: 'browser_network_state_set' },
   handle: async (context, params, result) => {
     await context.browserContext().setOffline(params.state === 'offline');
     result.addTextResult(`Network is now ${params.state}.`);

@@ -1,13 +1,7 @@
 import { defineTool } from '../tool';
 
 export const browserTabs = defineTool({
-  capability: 'core-tabs',
-  schema: {
-    name: 'browser_tabs',
-    title: 'Manage tabs',
-    description: 'List, create, close, or select a browser tab',
-    type: 'action',
-  },
+  schema: { name: 'browser_tabs' },
   handle: async (context, params, result) => {
     switch (params.action) {
       case 'list':

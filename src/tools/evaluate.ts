@@ -1,13 +1,7 @@
 import { defineTabTool } from '../tool';
 
 export const evaluate = defineTabTool({
-  capability: 'core',
-  schema: {
-    name: 'browser_evaluate',
-    title: 'Evaluate JavaScript',
-    description: 'Evaluate a JavaScript expression on the page or a specific element',
-    type: 'action',
-  },
+  schema: { name: 'browser_evaluate' },
   handle: async (tab, params, result) => {
     let expr: string = params.function;
     if (!expr.includes('=>')) expr = `() => (${expr})`;

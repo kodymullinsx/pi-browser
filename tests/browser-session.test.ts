@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const playwright = vi.hoisted(() => {
   const browserListeners = new Map<string, Array<() => void>>();
@@ -25,6 +28,8 @@ const playwright = vi.hoisted(() => {
   const chromiumLaunch = vi.fn(async () => browser);
   const chromiumLaunchPersistentContext = vi.fn(async () => browserContext);
   const chromiumConnectOverCDP = vi.fn(async () => browser);
+  // An existing file stands in for an installed browser; tests point it elsewhere to simulate a missing one.
+  const chromiumExecutablePath = vi.fn(() => import.meta.filename);
   const resetBrowserListeners = () => browserListeners.clear();
   return {
     browser,
@@ -32,6 +37,7 @@ const playwright = vi.hoisted(() => {
     chromiumLaunch,
     chromiumLaunchPersistentContext,
     chromiumConnectOverCDP,
+    chromiumExecutablePath,
     resetBrowserListeners,
   };
 });
@@ -41,17 +47,25 @@ vi.mock('playwright', () => ({
     launch: playwright.chromiumLaunch,
     launchPersistentContext: playwright.chromiumLaunchPersistentContext,
     connectOverCDP: playwright.chromiumConnectOverCDP,
+    executablePath: playwright.chromiumExecutablePath,
   },
-  firefox: { launch: vi.fn(), launchPersistentContext: vi.fn() },
-  webkit: { launch: vi.fn(), launchPersistentContext: vi.fn() },
+  firefox: { launch: vi.fn(), launchPersistentContext: vi.fn(), executablePath: vi.fn(() => import.meta.filename) },
+  webkit: { launch: vi.fn(), launchPersistentContext: vi.fn(), executablePath: vi.fn(() => import.meta.filename) },
 }));
 
 import { BrowserSession, parseBrowserName } from '../src/browser-session';
 
+const missingBrowser = path.join(os.tmpdir(), `browser-session-missing-${process.pid}`);
+
 beforeEach(() => {
   vi.clearAllMocks();
+  playwright.chromiumExecutablePath.mockReturnValue(import.meta.filename);
   playwright.resetBrowserListeners();
   vi.stubGlobal('fetch', vi.fn(async () => ({ json: async () => [] })));
+});
+
+afterEach(() => {
+  rmSync(missingBrowser, { force: true });
 });
 
 describe('parseBrowserName', () => {
@@ -101,16 +115,35 @@ describe('BrowserSession isolated mode', () => {
   });
 });
 
-describe('BrowserSession browser provisioning', () => {
-  it('installs a missing browser and retries persistent launch once', async () => {
-    const missingExecutable = new Error(
-      "browserType.launchPersistentContext: Executable doesn't exist at /cache/chromium-1228/chrome\n" +
-      'Please run the following command to download new browsers:\n\n    npx playwright install',
+describe('BrowserSession connect failure', () => {
+  it('closes the browser and reports disconnected when the CDP target list cannot be read', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('connect ECONNREFUSED'); }));
+    const session = new BrowserSession();
+
+    await expect(session.connect({ type: 'cdp', port: 9222 })).rejects.toThrow('connect ECONNREFUSED');
+
+    expect(playwright.browser.close).toHaveBeenCalledOnce();
+    expect(session.context).toBeNull();
+    expect(session.status()).toBe('disconnected');
+  });
+
+  it('closes a launched isolated browser when its context cannot be created', async () => {
+    playwright.browser.newContext.mockRejectedValueOnce(new Error('context failed'));
+    const session = new BrowserSession();
+
+    await expect(session.connect({ type: 'isolated', browserName: 'chromium' })).rejects.toThrow(
+      'context failed',
     );
-    playwright.chromiumLaunchPersistentContext
-      .mockRejectedValueOnce(missingExecutable)
-      .mockResolvedValueOnce(playwright.browserContext);
-    const installBrowser = vi.fn(async () => {});
+
+    expect(playwright.browser.close).toHaveBeenCalledOnce();
+    expect(session.status()).toBe('disconnected');
+  });
+});
+
+describe('BrowserSession browser provisioning', () => {
+  it('installs a missing browser before the persistent launch', async () => {
+    playwright.chromiumExecutablePath.mockReturnValue(missingBrowser);
+    const installBrowser = vi.fn(async () => { writeFileSync(missingBrowser, ''); });
     const session = new BrowserSession();
 
     await session.connect(
@@ -121,10 +154,36 @@ describe('BrowserSession browser provisioning', () => {
 
     expect(installBrowser).toHaveBeenCalledOnce();
     expect(installBrowser).toHaveBeenCalledWith('chromium');
-    expect(playwright.chromiumLaunchPersistentContext).toHaveBeenCalledTimes(2);
+    expect(playwright.chromiumLaunchPersistentContext).toHaveBeenCalledOnce();
+    expect(existsSync(missingBrowser)).toBe(true);
   });
 
-  it('does not install or retry after an unrelated launch error', async () => {
+  it('does not install a browser that is already present', async () => {
+    const installBrowser = vi.fn(async () => {});
+    const session = new BrowserSession();
+
+    await session.connect({ type: 'isolated', browserName: 'chromium' }, {}, installBrowser);
+
+    expect(installBrowser).not.toHaveBeenCalled();
+    expect(playwright.chromiumLaunch).toHaveBeenCalledOnce();
+  });
+
+  it('does not launch when installing a missing browser fails', async () => {
+    playwright.chromiumExecutablePath.mockReturnValue(missingBrowser);
+    const installBrowser = vi.fn(async () => { throw new Error('download unavailable'); });
+    const session = new BrowserSession();
+
+    await expect(session.connect(
+      { type: 'launch', browserName: 'chromium' },
+      {},
+      installBrowser,
+    )).rejects.toThrow('download unavailable');
+
+    expect(playwright.chromiumLaunchPersistentContext).not.toHaveBeenCalled();
+    expect(session.status()).toBe('disconnected');
+  });
+
+  it('does not install after an unrelated launch error', async () => {
     playwright.chromiumLaunch.mockRejectedValueOnce(new Error('Browser closed during startup'));
     const installBrowser = vi.fn(async () => {});
     const session = new BrowserSession();

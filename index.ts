@@ -11,16 +11,8 @@
  *   /browser status           - show connection + open tabs
  *   /browser disconnect       - release the browser connection
  *
- * Once connected, the following tools become available:
- *   browser_navigate, browser_navigate_back, browser_reload
- *   browser_snapshot, browser_take_screenshot
- *   browser_click, browser_hover, browser_drag, browser_select_option
- *   browser_type, browser_press_key
- *   browser_fill_form
- *   browser_tabs
- *   browser_evaluate
- *   browser_wait_for
- *   browser_close, browser_resize
+ * Every tool in src/tools is registered below as a deferred browser_* tool and
+ * returns an error until a browser is connected. README.md lists them.
  */
 
 import type { ExtensionAPI, ExtensionCommandContext, ToolDefinition } from '@earendil-works/pi-coding-agent';
@@ -56,6 +48,11 @@ import storageTools from './src/tools/storage';
 
 // Helper type so params coming from pi can be cast safely
 type Params = Record<string, any>;
+
+const LAUNCH_LABELS = {
+  launch: { running: 'Launching', done: 'Launched', failed: 'Launch failed' },
+  isolated: { running: 'Launching isolated', done: 'Launched isolated', failed: 'Isolated launch failed' },
+} as const;
 
 function makeTool(session: BrowserSession, tool: Tool) {
   return async (params: Params) => {
@@ -636,7 +633,7 @@ export default function (pi: ExtensionAPI) {
         const port = parseInt(parts[1] ?? '9222', 10);
         ctx.ui.notify(`Connecting to browser on port ${port}...`, 'info');
         try {
-          await session.connect({ type: 'cdp', port }, { timeouts: { action: 10000, navigation: 30000 } });
+          await session.connect({ type: 'cdp', port }, browserConfig);
           const tabCount = session.context?.tabs().length ?? 0;
           ctx.ui.notify(`Connected via CDP (port ${port}). ${tabCount} tab(s) found.`, 'info');
         } catch (e: any) {
@@ -645,26 +642,15 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      if (sub === 'launch') {
+      if (sub === 'launch' || sub === 'isolated') {
+        const label = LAUNCH_LABELS[sub];
         try {
           const browserName = parseBrowserName(parts[1]);
-          ctx.ui.notify(`Launching ${browserName}...`, 'info');
-          await connectBrowser({ type: 'launch', browserName }, ctx);
-          ctx.ui.notify(`Launched ${browserName}.`, 'info');
+          ctx.ui.notify(`${label.running} ${browserName}...`, 'info');
+          await connectBrowser({ type: sub, browserName }, ctx);
+          ctx.ui.notify(`${label.done} ${browserName}.`, 'info');
         } catch (e: any) {
-          ctx.ui.notify(`Launch failed: ${e.message}`, 'error');
-        }
-        return;
-      }
-
-      if (sub === 'isolated') {
-        try {
-          const browserName = parseBrowserName(parts[1]);
-          ctx.ui.notify(`Launching isolated ${browserName}...`, 'info');
-          await connectBrowser({ type: 'isolated', browserName }, ctx);
-          ctx.ui.notify(`Launched isolated ${browserName}.`, 'info');
-        } catch (e: any) {
-          ctx.ui.notify(`Isolated launch failed: ${e.message}`, 'error');
+          ctx.ui.notify(`${label.failed}: ${e.message}`, 'error');
         }
         return;
       }

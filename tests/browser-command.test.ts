@@ -1,7 +1,9 @@
+import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const playwright = vi.hoisted(() => {
+  const executablePath = vi.fn(() => import.meta.filename);
   const browserContext = {
     pages: vi.fn(() => []),
     on: vi.fn(),
@@ -10,23 +12,27 @@ const playwright = vi.hoisted(() => {
   const browser = {
     close: vi.fn(async () => {}),
     isConnected: vi.fn(() => true),
+    newContext: vi.fn(async () => browserContext),
     on: vi.fn(),
   };
   browserContext.browser.mockReturnValue(browser);
   return {
     browserContext,
+    executablePath,
+    launch: vi.fn(async () => browser),
     launchPersistentContext: vi.fn(),
   };
 });
 
 vi.mock('playwright', () => ({
   chromium: {
-    launch: vi.fn(),
+    launch: playwright.launch,
     launchPersistentContext: playwright.launchPersistentContext,
     connectOverCDP: vi.fn(),
+    executablePath: playwright.executablePath,
   },
-  firefox: { launch: vi.fn(), launchPersistentContext: vi.fn() },
-  webkit: { launch: vi.fn(), launchPersistentContext: vi.fn() },
+  firefox: { launch: vi.fn(), launchPersistentContext: vi.fn(), executablePath: vi.fn(() => import.meta.filename) },
+  webkit: { launch: vi.fn(), launchPersistentContext: vi.fn(), executablePath: vi.fn(() => import.meta.filename) },
 }));
 
 import browserControl from '../index';
@@ -37,10 +43,7 @@ const toolModules = import.meta.glob<{ default: Array<{ schema: { name: string }
 );
 const extensionRoot = path.resolve(import.meta.dirname, '..');
 
-const missingExecutable = new Error(
-  "browserType.launchPersistentContext: Executable doesn't exist at /cache/chromium/chrome\n" +
-  'Please run the following command to download new browsers:\n\n    npx playwright install',
-);
+const missingBrowser = path.join(os.tmpdir(), `browser-command-missing-${process.pid}`);
 
 type BrowserCommand = {
   handler: (args: string, ctx: any) => Promise<void>;
@@ -67,6 +70,7 @@ function loadExtension(execResult: { stdout: string; stderr: string; code: numbe
 
 beforeEach(() => {
   vi.clearAllMocks();
+  playwright.executablePath.mockReturnValue(import.meta.filename);
 });
 
 describe('browser-control registration', () => {
@@ -106,10 +110,9 @@ describe('browser-control registration', () => {
 });
 
 describe('/browser launch provisioning', () => {
-  it('uses the extension-local Playwright CLI and retries launch once', async () => {
-    playwright.launchPersistentContext
-      .mockRejectedValueOnce(missingExecutable)
-      .mockResolvedValueOnce(playwright.browserContext);
+  it('installs a missing browser with the extension-local Playwright CLI, then launches once', async () => {
+    playwright.executablePath.mockReturnValue(missingBrowser);
+    playwright.launchPersistentContext.mockResolvedValueOnce(playwright.browserContext);
     const { command, ctx, exec, notify } = loadExtension({
       stdout: '',
       stderr: '',
@@ -125,12 +128,12 @@ describe('/browser launch provisioning', () => {
       [path.join(extensionRoot, 'node_modules', 'playwright', 'cli.js'), 'install', 'chromium'],
       { cwd: extensionRoot, timeout: 600000 },
     );
-    expect(playwright.launchPersistentContext).toHaveBeenCalledTimes(2);
+    expect(playwright.launchPersistentContext).toHaveBeenCalledOnce();
     expect(notify).toHaveBeenLastCalledWith('Launched chromium.', 'info');
   });
 
-  it('surfaces installer failure and does not retry launch', async () => {
-    playwright.launchPersistentContext.mockRejectedValueOnce(missingExecutable);
+  it('surfaces installer failure and does not launch', async () => {
+    playwright.executablePath.mockReturnValue(missingBrowser);
     const { command, ctx, exec, notify } = loadExtension({
       stdout: '',
       stderr: 'download unavailable',
@@ -141,10 +144,36 @@ describe('/browser launch provisioning', () => {
     await command.handler('launch chromium', ctx);
 
     expect(exec).toHaveBeenCalledOnce();
-    expect(playwright.launchPersistentContext).toHaveBeenCalledOnce();
+    expect(playwright.launchPersistentContext).not.toHaveBeenCalled();
     expect(notify).toHaveBeenLastCalledWith(
       'Launch failed: Failed to install Playwright chromium: download unavailable',
       'error',
     );
+  });
+});
+
+describe('/browser isolated', () => {
+  it('reports progress and success with the isolated label', async () => {
+    const { command, ctx, notify } = loadExtension({ stdout: '', stderr: '', code: 0, killed: false });
+
+    await command.handler('isolated chromium', ctx);
+
+    expect(notify.mock.calls).toEqual([
+      ['Launching isolated chromium...', 'info'],
+      ['Launched isolated chromium.', 'info'],
+    ]);
+    expect(playwright.launch).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an unsupported browser with the isolated failure label', async () => {
+    const { command, ctx, notify } = loadExtension({ stdout: '', stderr: '', code: 0, killed: false });
+
+    await command.handler('isolated safari', ctx);
+
+    expect(notify).toHaveBeenLastCalledWith(
+      'Isolated launch failed: Unsupported browser "safari". Choose chromium, firefox, or webkit.',
+      'error',
+    );
+    expect(playwright.launch).not.toHaveBeenCalled();
   });
 });

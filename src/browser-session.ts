@@ -3,6 +3,7 @@
  * Handles CDP attach, persistent launch, and isolated launch modes.
  */
 
+import { existsSync } from 'node:fs';
 import * as pw from 'playwright';
 import { Context } from './context';
 import type { ContextConfig } from './context';
@@ -12,18 +13,22 @@ export type BrowserInstaller = (browserName: BrowserName) => Promise<void>;
 
 export type ConnectionMode =
   | { type: 'cdp'; port: number }
-  | { type: 'launch'; browserName?: BrowserName }
-  | { type: 'isolated'; browserName?: BrowserName };
+  | { type: 'launch'; browserName: BrowserName }
+  | { type: 'isolated'; browserName: BrowserName };
 
 export function parseBrowserName(value = 'chromium'): BrowserName {
   if (value === 'chromium' || value === 'firefox' || value === 'webkit') return value;
   throw new Error(`Unsupported browser "${value}". Choose chromium, firefox, or webkit.`);
 }
 
-function isMissingBrowserExecutable(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return error.message.includes("Executable doesn't exist at") &&
-    error.message.includes('playwright install');
+/** True when Playwright's matching browser build is not on disk. */
+function isBrowserMissing(browserType: pw.BrowserType): boolean {
+  try {
+    return !existsSync(browserType.executablePath());
+  } catch {
+    // Playwright cannot name an executable here; let launch report the real error.
+    return false;
+  }
 }
 
 export class BrowserSession {
@@ -48,15 +53,34 @@ export class BrowserSession {
       await this.disconnect();
 
     this._mode = mode;
+    try {
+      await this._open(mode, config, installBrowser);
+    } catch (error) {
+      // Do not leave a half-open browser or a mode that reports a connection.
+      await this.disconnect();
+      throw error;
+    }
 
-    const launch = async <T>(browserName: BrowserName, operation: () => Promise<T>): Promise<T> => {
-      try {
-        return await operation();
-      } catch (error) {
-        if (!installBrowser || !isMissingBrowserExecutable(error)) throw error;
+    const browser = this._browser!;
+    const context = this._context!;
+    browser.on('disconnected', () => {
+      if (this._browser !== browser) return;
+      this._browser = null;
+      if (this._context !== context) return;
+      this._context = null;
+      void context.dispose().catch(() => {});
+    });
+  }
+
+  private async _open(
+    mode: ConnectionMode,
+    config: ContextConfig,
+    installBrowser?: BrowserInstaller,
+  ): Promise<void> {
+    const launchOptions = { headless: false, handleSIGINT: false, handleSIGTERM: false };
+    const prepare = async (browserType: pw.BrowserType, browserName: BrowserName) => {
+      if (installBrowser && isBrowserMissing(browserType))
         await installBrowser(browserName);
-        return operation();
-      }
     };
 
     switch (mode.type) {
@@ -78,41 +102,23 @@ export class BrowserSession {
       }
 
       case 'launch': {
-        const browserName = mode.browserName ?? 'chromium';
-        const browserType = pw[browserName];
-        const browserContext = await launch(browserName, () => browserType.launchPersistentContext('', {
-          headless: false,
-          handleSIGINT: false,
-          handleSIGTERM: false,
-        }));
+        const browserType = pw[mode.browserName];
+        await prepare(browserType, mode.browserName);
+        const browserContext = await browserType.launchPersistentContext('', launchOptions);
         this._browser = browserContext.browser()!;
         this._context = new Context(browserContext, config);
         break;
       }
 
       case 'isolated': {
-        const browserName = mode.browserName ?? 'chromium';
-        const browserType = pw[browserName];
-        this._browser = await launch(browserName, () => browserType.launch({
-          headless: false,
-          handleSIGINT: false,
-          handleSIGTERM: false,
-        }));
+        const browserType = pw[mode.browserName];
+        await prepare(browserType, mode.browserName);
+        this._browser = await browserType.launch(launchOptions);
         const browserContext = await this._browser.newContext();
         this._context = new Context(browserContext, config);
         break;
       }
     }
-
-    const browser = this._browser;
-    const context = this._context;
-    browser.on('disconnected', () => {
-      if (this._browser !== browser) return;
-      this._browser = null;
-      if (this._context !== context) return;
-      this._context = null;
-      void context.dispose().catch(() => {});
-    });
   }
 
   async disconnect(): Promise<void> {
@@ -128,15 +134,13 @@ export class BrowserSession {
   }
 
   status(): string {
-    if (!this._browser || !this._browser.isConnected())
+    if (!this._browser || !this._browser.isConnected() || !this._mode)
       return 'disconnected';
-    const mode = this._mode;
-    if (!mode) return 'disconnected';
-    if (mode.type === 'cdp')
-      return `connected via CDP (port ${(mode as { type: 'cdp'; port: number }).port})`;
-    if (mode.type === 'launch')
-      return `connected (launched ${(mode as { type: 'launch'; browserName?: string }).browserName ?? 'chromium'})`;
-    return `connected (isolated ${(mode as { type: 'isolated'; browserName?: string }).browserName ?? 'chromium'})`;
+    switch (this._mode.type) {
+      case 'cdp': return `connected via CDP (port ${this._mode.port})`;
+      case 'launch': return `connected (launched ${this._mode.browserName})`;
+      case 'isolated': return `connected (isolated ${this._mode.browserName})`;
+    }
   }
 }
 

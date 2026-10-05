@@ -21,25 +21,20 @@ Pi auto-discovers the extension from this global extension directory; the local-
 ## Validation
 
 ```bash
-npm test                 # Live-version guard, TypeScript check, unit tests
-npm run test:loader      # Fresh installed Pi CLI; registration only, no browser/provider access
+npm test                 # TypeScript check and unit tests; needs no live Pi
+npm run test:loader      # Live Pi version guard, then registration through the installed Pi CLI
 ```
 
-The Pi development dependency is pinned to the exact live harness version. The guard
-compares the active CLI and its owning package with the declaration package actually
-resolved by TypeScript using `tsconfig.json`. It ignores npm-injected `node_modules/.bin`
-paths so `npm test` cannot accidentally compare the local Pi copy with itself.
+The Pi development dependency is pinned to an exact version so TypeScript checks the
+extension against a known SDK. `test:loader` compares that pin, the declaration package
+TypeScript resolves, and the active `pi` CLI, and fails when any of them differ. It ignores
+npm-injected `node_modules/.bin` paths so it cannot compare the local Pi copy with itself.
+When it reports a mismatch after a harness upgrade, run the install command in its message,
+update `peerDependencies` if the supported range changes, and rerun both commands.
 
-After a harness upgrade, align the dependency explicitly and rerun both commands:
-
-```bash
-npm install --save-dev --save-exact --ignore-scripts @earendil-works/pi-coding-agent@<live-version>
-```
-
-The canonical parent integration suite includes `test:loader`, which also runs the
-version guard. Matching versions and successful registration do not prove browser
-connectivity, signed-in state, or Playwright actions. Those require separate authorized
-browser acceptance tests.
+The canonical parent integration suite includes `test:loader`. Matching versions and
+successful registration do not prove browser connectivity, signed-in state, or Playwright
+actions. Those require separate authorized browser acceptance tests.
 
 ## Browser setup
 

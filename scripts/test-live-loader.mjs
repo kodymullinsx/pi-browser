@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { piBin } from './check-pi-version.mjs';
+import { checkLivePi } from './check-pi-version.mjs';
 
 const browserRoot = path.resolve(import.meta.dirname, '..');
+const { piBin } = checkLivePi();
 const directory = mkdtempSync(path.join(os.tmpdir(), 'browser-live-loader-'));
 const marker = 'BROWSER_REGISTRATION=';
 try {
@@ -13,7 +14,7 @@ try {
   writeFileSync(probe, `export default function (pi) {
     pi.registerCommand('probe-browser-registration', {
       handler: async () => console.log(${JSON.stringify(marker)} + JSON.stringify({
-        tools: pi.getAllTools().map(tool => tool.name),
+        tools: pi.getAllTools().map(tool => ({ name: tool.name, exposure: tool.exposure })),
         commands: pi.getCommands().map(command => command.name),
       })),
     });
@@ -44,12 +45,19 @@ try {
   assert.ok(line, `Registration probe did not execute:\n${result.stderr}\n${result.stdout}`);
   const registration = JSON.parse(line.slice(marker.length));
   assert.ok(registration.commands.includes('browser'), '/browser must register');
-  const names = registration.tools.filter(name => name.startsWith('browser_'));
-  assert.ok(names.length >= 50, `Expected at least 50 registered browser tools, got ${names.length}`);
+  const registered = registration.tools.filter(tool => tool.name.startsWith('browser_'));
+  const names = registered.map(tool => tool.name);
   assert.equal(new Set(names).size, names.length, 'Browser tool names must be unique');
-  for (const name of ['browser_navigate', 'browser_snapshot', 'browser_devtools', 'browser_set_storage_state']) {
-    assert.ok(names.includes(name), `Missing browser tool: ${name}`);
-  }
+
+  // Every tool implemented under src/tools must be registered, and nothing else.
+  const toolsDirectory = path.join(browserRoot, 'src', 'tools');
+  const implemented = readdirSync(toolsDirectory).filter(file => file.endsWith('.ts'))
+    .flatMap(file => [...readFileSync(path.join(toolsDirectory, file), 'utf8').matchAll(/\bname: '(browser_[a-z_]+)'/g)])
+    .map(match => match[1]);
+  assert.ok(implemented.length > 0, 'No browser tool implementations found under src/tools');
+  assert.deepEqual([...names].sort(), [...implemented].sort(), 'Registered tools differ from src/tools');
+  const eager = registered.filter(tool => tool.exposure !== 'deferred').map(tool => tool.name);
+  assert.deepEqual(eager, [], 'Browser tools must use deferred exposure');
   console.log(`[live-loader] /browser and ${names.length} browser tools registered through ${piBin}`);
   console.log('[live-loader] No browser launched or attached; no provider request made.');
 } finally {

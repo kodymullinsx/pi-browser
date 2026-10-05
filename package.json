@@ -26,7 +26,7 @@
     "playwright": "1.63.0"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-coding-agent": "^1.0.0",
     "typebox": "*"
   },
   "devDependencies": {
@@ -38,9 +38,9 @@
   },
   "scripts": {
     "check:pi-version": "node scripts/check-pi-version.mjs",
-    "typecheck": "npm run check:pi-version && tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "npm run typecheck && vitest run",
     "test:loader": "node scripts/test-live-loader.mjs",
-    "test:watch": "npm run check:pi-version && vitest"
+    "test:watch": "vitest"
   }
 }

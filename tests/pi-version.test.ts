@@ -70,4 +70,23 @@ describe('browser Pi compatibility guard', () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Pi launcher/package version mismatch');
   });
+
+  it('names the missing command when no live pi is on PATH', () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'browser-pi-version-'));
+    temporaryDirectories.push(directory);
+    const bin = path.join(directory, 'bin');
+    mkdirSync(bin);
+    symlinkSync(process.execPath, path.join(bin, 'node'));
+
+    const result = spawnSync(process.execPath, [path.join(root, 'scripts/check-pi-version.mjs')], {
+      cwd: directory,
+      encoding: 'utf8',
+      timeout: 15_000,
+      env: { PATH: `${bin}:/usr/bin:/bin`, HOME: directory, PI_OFFLINE: '1' },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('No live `pi` command found on PATH');
+  });
 });

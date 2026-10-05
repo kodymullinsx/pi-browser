@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 
 const packageName = '@earendil-works/pi-coding-agent';
@@ -21,43 +22,55 @@ function findPiPackage(entry) {
   }
 }
 
-// Follow the same tsconfig and module resolution used by the ordinary typecheck.
-// Comparing node_modules manifests alone would miss a paths/types redirection.
-const configPath = path.join(browserRoot, 'tsconfig.json');
-const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
-assert.equal(configFile.error, undefined, 'Cannot read browser-control tsconfig.json');
-const config = ts.parseJsonConfigFileContent(configFile.config, ts.sys, browserRoot);
-assert.equal(config.errors.length, 0, 'Invalid browser-control tsconfig.json');
-const resolved = ts.resolveModuleName(
-  packageName, path.join(browserRoot, 'index.ts'), config.options, ts.sys,
-).resolvedModule;
-assert.ok(resolved, `TypeScript cannot resolve ${packageName}`);
-const typesPackage = findPiPackage(resolved.resolvedFileName);
+/**
+ * Compare the live Pi CLI with the Pi declaration package TypeScript resolves and the
+ * exact devDependency pin. Throws on any mismatch; returns the live CLI path.
+ */
+export function checkLivePi() {
+  // Follow the same tsconfig and module resolution used by the ordinary typecheck.
+  // Comparing node_modules manifests alone would miss a paths/types redirection.
+  const configPath = path.join(browserRoot, 'tsconfig.json');
+  const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
+  assert.equal(configFile.error, undefined, 'Cannot read browser-control tsconfig.json');
+  const config = ts.parseJsonConfigFileContent(configFile.config, ts.sys, browserRoot);
+  assert.equal(config.errors.length, 0, 'Invalid browser-control tsconfig.json');
+  const resolved = ts.resolveModuleName(
+    packageName, path.join(browserRoot, 'index.ts'), config.options, ts.sys,
+  ).resolvedModule;
+  assert.ok(resolved, `TypeScript cannot resolve ${packageName}`);
+  const typesPackage = findPiPackage(resolved.resolvedFileName);
 
-// npm prepends package/ancestor node_modules/.bin directories. Ignore those
-// injected development bins or npm test would compare the local Pi with itself.
-const livePath = (process.env.PATH ?? '').split(path.delimiter)
-  .filter(directory => !path.resolve(directory).endsWith(`${path.sep}node_modules${path.sep}.bin`))
-  .join(path.delimiter);
-const piBin = execFileSync('which', ['pi'], {
-  encoding: 'utf8', timeout: 10_000, env: { ...process.env, PATH: livePath },
-}).trim();
-const livePackage = findPiPackage(piBin);
-const cliVersion = execFileSync(piBin, ['--version'], {
-  encoding: 'utf8', timeout: 10_000,
-}).trim();
-const declaredVersion = JSON.parse(readFileSync(path.join(browserRoot, 'package.json'), 'utf8'))
-  .devDependencies[packageName];
+  // npm prepends package/ancestor node_modules/.bin directories. Ignore those
+  // injected development bins or the guard would compare the local Pi with itself.
+  const livePath = (process.env.PATH ?? '').split(path.delimiter)
+    .filter(directory => !path.resolve(directory).endsWith(`${path.sep}node_modules${path.sep}.bin`))
+    .join(path.delimiter);
+  let piBin;
+  try {
+    piBin = execFileSync('which', ['pi'], {
+      encoding: 'utf8', timeout: 10_000, env: { ...process.env, PATH: livePath },
+    }).trim();
+  } catch {
+    assert.fail('No live `pi` command found on PATH; the compatibility guard compares against the installed Pi.');
+  }
+  const livePackage = findPiPackage(piBin);
+  const cliVersion = execFileSync(piBin, ['--version'], {
+    encoding: 'utf8', timeout: 10_000,
+  }).trim();
+  const declaredVersion = JSON.parse(readFileSync(path.join(browserRoot, 'package.json'), 'utf8'))
+    .devDependencies[packageName];
 
-assert.equal(cliVersion, livePackage.manifest.version, 'Pi launcher/package version mismatch');
-assert.equal(
-  typesPackage.manifest.version, cliVersion,
-  `Browser Pi types (${typesPackage.manifest.version}) differ from live Pi (${cliVersion}). ` +
-  `Run npm install --save-dev --save-exact --ignore-scripts ${packageName}@${cliVersion}, then rerun npm test.`,
-);
-assert.equal(declaredVersion, cliVersion, 'Pin the browser Pi devDependency to the exact live version');
-console.log(`[pi-version] live=${cliVersion} types=${typesPackage.manifest.version} pin=${declaredVersion}`);
-console.log(`[pi-version] CLI: ${realpathSync(piBin)}`);
-console.log(`[pi-version] TypeScript: ${resolved.resolvedFileName}`);
+  assert.equal(cliVersion, livePackage.manifest.version, 'Pi launcher/package version mismatch');
+  assert.equal(
+    typesPackage.manifest.version, cliVersion,
+    `Browser Pi types (${typesPackage.manifest.version}) differ from live Pi (${cliVersion}). ` +
+    `Run npm install --save-dev --save-exact --ignore-scripts ${packageName}@${cliVersion}, then rerun npm run test:loader.`,
+  );
+  assert.equal(declaredVersion, cliVersion, 'Pin the browser Pi devDependency to the exact live version');
+  console.log(`[pi-version] live=${cliVersion} types=${typesPackage.manifest.version} pin=${declaredVersion}`);
+  console.log(`[pi-version] CLI: ${realpathSync(piBin)}`);
+  console.log(`[pi-version] TypeScript: ${resolved.resolvedFileName}`);
+  return { piBin };
+}
 
-export { piBin };
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) checkLivePi();

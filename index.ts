@@ -29,6 +29,7 @@ import { dirname, join } from 'node:path';
 import { Type } from 'typebox';
 import { BrowserSession, parseBrowserName } from './src/browser-session';
 import type { ConnectionMode } from './src/browser-session';
+import { MONITOR_LIMITS, MONITOR_SIGNALS } from './src/devtools';
 import { BrowserToolResult } from './src/response';
 import type { Context } from './src/context';
 import type { Tool } from './src/tool';
@@ -406,14 +407,21 @@ export default function (pi: ExtensionAPI) {
         Type.Literal('monitor_read'),
         Type.Literal('monitor_stop'),
       ], { description: 'DevTools operation to perform' }),
-      signals: Type.Optional(Type.Array(Type.Union([
-        Type.Literal('runtime'),
-        Type.Literal('network-failures'),
-        Type.Literal('lifecycle'),
-      ]), { description: 'monitor_start signals; defaults to all three', maxItems: 3 })),
+      signals: Type.Optional(Type.Array(
+        Type.Union(MONITOR_SIGNALS.map(signal => Type.Literal(signal))),
+        { description: 'monitor_start signals; defaults to all of them', maxItems: MONITOR_SIGNALS.length },
+      )),
       monitorId: Type.Optional(Type.String({ description: 'Monitor ID returned by monitor_start' })),
-      maxEvents: Type.Optional(Type.Integer({ description: 'monitor_start ring-buffer size (default 200)', minimum: 1, maximum: 1000 })),
-      limit: Type.Optional(Type.Integer({ description: 'monitor_read maximum events (default 100)', minimum: 1, maximum: 500 })),
+      maxEvents: Type.Optional(Type.Integer({
+        description: `monitor_start ring-buffer size (default ${MONITOR_LIMITS.maxEvents.default})`,
+        minimum: 1,
+        maximum: MONITOR_LIMITS.maxEvents.max,
+      })),
+      limit: Type.Optional(Type.Integer({
+        description: `monitor_read maximum events (default ${MONITOR_LIMITS.readLimit.default})`,
+        minimum: 1,
+        maximum: MONITOR_LIMITS.readLimit.max,
+      })),
       clear: Type.Optional(Type.Boolean({ description: 'monitor_read: remove returned events from the buffer' })),
     }),
   });

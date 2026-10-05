@@ -298,6 +298,80 @@ describe('DevToolsManager', () => {
     expect(harness.browserSession.detach).toHaveBeenCalledOnce();
   });
 
+  it('does not count monitors on closed pages against the browser-wide cap', async () => {
+    const harness = makeHarness();
+    const manager = new DevToolsManager();
+    const makePage = (index: number) => ({
+      ...harness.page,
+      url: () => `https://example.com/${index}`,
+      on: vi.fn(),
+    });
+    const closing = Array.from({ length: 4 }, (_, index) => makePage(index));
+    const closeListeners = closing.map(page => {
+      const listeners: Array<() => void> = [];
+      page.on = vi.fn((event: string, listener: () => void) => {
+        if (event === 'close') listeners.push(listener);
+      });
+      return listeners;
+    });
+
+    for (const page of closing) {
+      for (let i = 0; i < 4; i++)
+        await manager.startMonitor(page as any, ['runtime'], 10);
+    }
+    for (const listeners of closeListeners) listeners.forEach(listener => listener());
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await expect(manager.startMonitor(makePage(9) as any, ['runtime'], 10)).resolves.toMatchObject({
+      signals: ['runtime'],
+    });
+  });
+
+  it('keeps concurrent monitor starts within the per-page cap', async () => {
+    const harness = makeHarness();
+    const manager = new DevToolsManager();
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 6 }, () => manager.startMonitor(harness.page as any, ['runtime'], 10)),
+    );
+
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(4);
+    expect(results.filter(result => result.status === 'rejected')).toHaveLength(2);
+  });
+
+  it('releases the monitor slot when enabling a signal fails', async () => {
+    const harness = makeHarness();
+    const manager = new DevToolsManager();
+    harness.pageSession.send.mockRejectedValueOnce(new Error('Runtime.enable failed'));
+
+    await expect(manager.startMonitor(harness.page as any, ['runtime'], 10)).rejects.toThrow(
+      'Runtime.enable failed',
+    );
+    for (let i = 0; i < 4; i++)
+      await manager.startMonitor(harness.page as any, ['runtime'], 10);
+  });
+
+  it('rejects out-of-range limits and unknown signals before touching CDP', async () => {
+    const harness = makeHarness();
+    const manager = new DevToolsManager();
+
+    await expect(manager.startMonitor(harness.page as any, ['runtime'], 0)).rejects.toThrow(
+      'maxEvents must be an integer from 1 to 1000.',
+    );
+    await expect(manager.startMonitor(harness.page as any, ['runtime'], 1001)).rejects.toThrow(
+      'maxEvents must be an integer from 1 to 1000.',
+    );
+    await expect(manager.startMonitor(harness.page as any, ['console' as any], 10)).rejects.toThrow(
+      'does not support signal "console"',
+    );
+    const monitor = await manager.startMonitor(harness.page as any, ['runtime'], 10);
+    expect(() => manager.readMonitor(monitor.id, 0, false)).toThrow(
+      'limit must be an integer from 1 to 500.',
+    );
+    expect(harness.context.newCDPSession).toHaveBeenCalledOnce();
+  });
+
   it('rejects non-Chromium browsers explicitly', async () => {
     const harness = makeHarness('firefox');
     const manager = new DevToolsManager();

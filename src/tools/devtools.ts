@@ -1,7 +1,6 @@
 import { defineTool } from '../tool';
+import { MONITOR_LIMITS, MONITOR_SIGNALS } from '../devtools';
 import type { DevToolsMonitorSignal } from '../devtools';
-
-const DEFAULT_SIGNALS: DevToolsMonitorSignal[] = ['runtime', 'network-failures', 'lifecycle'];
 
 function requiredMonitorId(params: Record<string, any>): string {
   if (typeof params.monitorId !== 'string' || !params.monitorId)
@@ -26,10 +25,10 @@ export const devtools = defineTool({
     } else if (params.action === 'metrics') {
       value = await manager.metrics((await context.ensureTab()).page);
     } else if (params.action === 'monitor_start') {
-      const signals = (params.signals ?? DEFAULT_SIGNALS) as DevToolsMonitorSignal[];
-      value = await manager.startMonitor((await context.ensureTab()).page, signals, params.maxEvents ?? 200);
+      const signals = (params.signals ?? MONITOR_SIGNALS) as DevToolsMonitorSignal[];
+      value = await manager.startMonitor((await context.ensureTab()).page, signals, params.maxEvents ?? MONITOR_LIMITS.maxEvents.default);
     } else if (params.action === 'monitor_read') {
-      value = manager.readMonitor(requiredMonitorId(params), params.limit ?? 100, params.clear ?? false);
+      value = manager.readMonitor(requiredMonitorId(params), params.limit ?? MONITOR_LIMITS.readLimit.default, params.clear ?? false);
     } else if (params.action === 'monitor_stop') {
       value = manager.stopMonitor(requiredMonitorId(params));
     } else {

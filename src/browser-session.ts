@@ -7,10 +7,24 @@ import * as pw from 'playwright';
 import { Context } from './context';
 import type { ContextConfig } from './context';
 
+export type BrowserName = 'chromium' | 'firefox' | 'webkit';
+export type BrowserInstaller = (browserName: BrowserName) => Promise<void>;
+
 export type ConnectionMode =
   | { type: 'cdp'; port: number }
-  | { type: 'launch'; browserName?: 'chromium' | 'firefox' | 'webkit' }
-  | { type: 'isolated'; browserName?: 'chromium' | 'firefox' | 'webkit' };
+  | { type: 'launch'; browserName?: BrowserName }
+  | { type: 'isolated'; browserName?: BrowserName };
+
+export function parseBrowserName(value = 'chromium'): BrowserName {
+  if (value === 'chromium' || value === 'firefox' || value === 'webkit') return value;
+  throw new Error(`Unsupported browser "${value}". Choose chromium, firefox, or webkit.`);
+}
+
+function isMissingBrowserExecutable(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.message.includes("Executable doesn't exist at") &&
+    error.message.includes('playwright install');
+}
 
 export class BrowserSession {
   private _browser: pw.Browser | null = null;
@@ -25,11 +39,25 @@ export class BrowserSession {
     return this._browser !== null && this._browser.isConnected();
   }
 
-  async connect(mode: ConnectionMode, config: ContextConfig = {}): Promise<void> {
+  async connect(
+    mode: ConnectionMode,
+    config: ContextConfig = {},
+    installBrowser?: BrowserInstaller,
+  ): Promise<void> {
     if (this._browser)
       await this.disconnect();
 
     this._mode = mode;
+
+    const launch = async <T>(browserName: BrowserName, operation: () => Promise<T>): Promise<T> => {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!installBrowser || !isMissingBrowserExecutable(error)) throw error;
+        await installBrowser(browserName);
+        return operation();
+      }
+    };
 
     switch (mode.type) {
       case 'cdp': {
@@ -46,34 +74,45 @@ export class BrowserSession {
         const allTargets: CdpTarget[] = await resp.json();
 
         this._context = new Context(contexts, config, { port: mode.port, allTargets });
-        this._browser.on('disconnected', () => { this._browser = null; this._context = null; });
         break;
       }
 
       case 'launch': {
-        const browserType = pw[mode.browserName ?? 'chromium'];
-        const browserContext = await browserType.launchPersistentContext('', {
+        const browserName = mode.browserName ?? 'chromium';
+        const browserType = pw[browserName];
+        const browserContext = await launch(browserName, () => browserType.launchPersistentContext('', {
           headless: false,
           handleSIGINT: false,
           handleSIGTERM: false,
-        });
+        }));
         this._browser = browserContext.browser()!;
         this._context = new Context(browserContext, config);
         break;
       }
 
       case 'isolated': {
-        const browserType = pw[mode.browserName ?? 'chromium'];
-        this._browser = await browserType.launch({
+        const browserName = mode.browserName ?? 'chromium';
+        const browserType = pw[browserName];
+        this._browser = await launch(browserName, () => browserType.launch({
           headless: false,
           handleSIGINT: false,
           handleSIGTERM: false,
-        });
+        }));
         const browserContext = await this._browser.newContext();
         this._context = new Context(browserContext, config);
         break;
       }
     }
+
+    const browser = this._browser;
+    const context = this._context;
+    browser.on('disconnected', () => {
+      if (this._browser !== browser) return;
+      this._browser = null;
+      if (this._context !== context) return;
+      this._context = null;
+      void context.dispose().catch(() => {});
+    });
   }
 
   async disconnect(): Promise<void> {

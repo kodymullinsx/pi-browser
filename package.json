@@ -1,15 +1,15 @@
 {
-  "name": "pi-browser",
+  "name": "browser-control",
   "version": "0.1.0",
-  "description": "Browser automation tools for the pi coding agent, backed by Playwright",
+  "private": true,
+  "description": "Local browser automation tools for Pi, backed by Playwright",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/larsderidder/pi-browser.git"
+    "url": "https://github.com/kodymullinsx/pi-browser.git"
   },
-  "homepage": "https://github.com/larsderidder/pi-browser#readme",
+  "homepage": "https://github.com/kodymullinsx/pi-browser#readme",
   "keywords": [
-    "pi-package",
     "pi-extension",
     "browser",
     "playwright",
@@ -23,19 +23,24 @@
     ]
   },
   "dependencies": {
-    "playwright": "^1.52.0"
+    "playwright": "1.63.0"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "typebox": "*"
   },
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.0.0",
     "@types/node": "^22.0.0",
+    "typebox": "^1.3.6",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.11"
   },
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "check:pi-version": "node scripts/check-pi-version.mjs",
+    "typecheck": "npm run check:pi-version && tsc --noEmit -p tsconfig.json",
+    "test": "npm run typecheck && vitest run",
+    "test:loader": "node scripts/test-live-loader.mjs",
+    "test:watch": "npm run check:pi-version && vitest"
   }
 }

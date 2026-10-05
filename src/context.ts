@@ -4,6 +4,7 @@
  */
 
 import type * as pw from 'playwright';
+import { DevToolsManager } from './devtools';
 import { Tab } from './tab';
 import type { CdpTarget } from './browser-session';
 
@@ -35,6 +36,7 @@ export class Context {
   private _tabs: Tab[] = [];
   private _currentTab: Tab | undefined;
   private _routes: RouteEntry[] = [];
+  private _devtools = new DevToolsManager();
 
   // CDP targets not reachable via Playwright (different windows)
   private _cdpOnlyTargets: CdpTarget[] = [];
@@ -70,6 +72,7 @@ export class Context {
   }
 
   async dispose() {
+    await this._devtools.dispose();
     for (const tab of this._tabs)
       await tab.dispose();
     this._tabs = [];
@@ -79,6 +82,10 @@ export class Context {
 
   browserContext(): pw.BrowserContext {
     return this._browserContexts[0];
+  }
+
+  devtools(): DevToolsManager {
+    return this._devtools;
   }
 
   tabs(): Tab[] {

@@ -1,5 +1,5 @@
 /**
- * pi-browser extension
+ * browser-control extension
  *
  * Gives pi browser automation tools backed directly by Playwright.
  * Connect to your running Chromium-based browser via CDP, or launch a new one.
@@ -7,6 +7,7 @@
  * Usage:
  *   /browser connect [port]   - attach to running browser (default port 9222)
  *   /browser launch           - launch a new Chromium instance
+ *   /browser isolated         - launch a fresh, non-persistent browser context
  *   /browser status           - show connection + open tabs
  *   /browser disconnect       - release the browser connection
  *
@@ -22,9 +23,12 @@
  *   browser_close, browser_resize
  */
 
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import type { ExtensionAPI, ExtensionCommandContext } from '@earendil-works/pi-coding-agent';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { Type } from 'typebox';
-import { BrowserSession } from './src/browser-session';
+import { BrowserSession, parseBrowserName } from './src/browser-session';
+import type { ConnectionMode } from './src/browser-session';
 import { BrowserToolResult } from './src/response';
 import type { Context } from './src/context';
 import type { Tool } from './src/tool';
@@ -40,6 +44,7 @@ import waitTools from './src/tools/wait';
 import commonTools from './src/tools/common';
 import mouseTools from './src/tools/mouse';
 import consoleTools from './src/tools/console';
+import devtoolsTools from './src/tools/devtools';
 import dialogTools from './src/tools/dialogs';
 import fileTools from './src/tools/files';
 import networkTools from './src/tools/network';
@@ -64,13 +69,32 @@ function makeTool(session: BrowserSession, tool: Tool) {
 
 export default function (pi: ExtensionAPI) {
   const session = new BrowserSession();
+  const extensionDir = dirname(fileURLToPath(import.meta.url));
+  const playwrightCli = join(extensionDir, 'node_modules', 'playwright', 'cli.js');
+  const browserConfig = { timeouts: { action: 10000, navigation: 30000 } };
+
+  async function connectBrowser(mode: ConnectionMode, ctx: ExtensionCommandContext): Promise<void> {
+    await session.connect(mode, browserConfig, async (browserName) => {
+      ctx.ui.notify(`Installing Playwright's matching ${browserName} browser...`, 'warning');
+      const result = await pi.exec(
+        process.execPath,
+        [playwrightCli, 'install', browserName],
+        { cwd: extensionDir, timeout: 600000 },
+      );
+      if (result.code !== 0) {
+        const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${result.code}`;
+        throw new Error(`Failed to install Playwright ${browserName}: ${detail}`);
+      }
+      ctx.ui.notify(`Installed Playwright ${browserName}; retrying launch...`, 'info');
+    });
+  }
 
   // Collect all tool implementations indexed by name
   const toolMap = new Map<string, Tool>();
   for (const t of [
     ...navigateTools, ...snapshotTools, ...keyboardTools, ...formTools,
     ...screenshotTools, ...tabTools, ...evaluateTools, ...waitTools, ...commonTools,
-    ...mouseTools, ...consoleTools, ...dialogTools, ...fileTools,
+    ...mouseTools, ...consoleTools, ...devtoolsTools, ...dialogTools, ...fileTools,
     ...networkTools, ...routeTools, ...cookieTools, ...webstorageTools, ...storageTools,
   ]) {
     toolMap.set(t.schema.name, t);
@@ -85,6 +109,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_navigate',
+    exposure: 'deferred',
     label: 'Navigate to URL',
     description: 'Navigate to a URL',
     parameters: Type.Object({ url: Type.String({ description: 'URL to navigate to' }) }),
@@ -96,6 +121,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_navigate_back',
+    exposure: 'deferred',
     label: 'Go back',
     description: 'Go back to the previous page in the history',
     parameters: Type.Object({}),
@@ -107,6 +133,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_reload',
+    exposure: 'deferred',
     label: 'Reload page',
     description: 'Reload the current page',
     parameters: Type.Object({}),
@@ -120,13 +147,9 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_snapshot',
+    exposure: 'deferred',
     label: 'Page snapshot',
     description: 'Capture the accessibility tree of the current page to find element refs for interaction. Do NOT call after every action to confirm results — check the snapshot included in action responses instead. Use selector param to scope to a specific section if the page is large.',
-    promptGuidelines: [
-      'Call browser_snapshot only when you need to find an element ref to interact with, not to confirm results.',
-      'Action tools (browser_click, browser_type, etc.) already include a snapshot in their response — do not call browser_snapshot again afterwards.',
-      'If the snapshot is too large, re-call with a selector scoped to the relevant section of the page.',
-    ],
     parameters: Type.Object({
       selector: Type.Optional(Type.String({ description: 'CSS selector for partial snapshot' })),
     }) as any,
@@ -138,6 +161,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_take_screenshot',
+    exposure: 'deferred',
     label: 'Take screenshot',
     description: "Take a screenshot of the current page. Use browser_snapshot for interactions; use this to visually inspect.",
     parameters: Type.Object({
@@ -155,6 +179,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_click',
+    exposure: 'deferred',
     label: 'Click',
     description: 'Click an element on the page',
     parameters: Type.Object({
@@ -173,6 +198,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_hover',
+    exposure: 'deferred',
     label: 'Hover',
     description: 'Hover over an element on the page',
     parameters: Type.Object({
@@ -188,6 +214,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_select_option',
+    exposure: 'deferred',
     label: 'Select option',
     description: 'Select an option in a dropdown',
     parameters: Type.Object({
@@ -204,6 +231,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_drag',
+    exposure: 'deferred',
     label: 'Drag',
     description: 'Drag and drop between two elements',
     parameters: Type.Object({
@@ -224,6 +252,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_type',
+    exposure: 'deferred',
     label: 'Type text',
     description: 'Type text into an editable element',
     parameters: Type.Object({
@@ -242,6 +271,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_press_key',
+    exposure: 'deferred',
     label: 'Press key',
     description: 'Press a key on the keyboard',
     parameters: Type.Object({
@@ -255,6 +285,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_fill_form',
+    exposure: 'deferred',
     label: 'Fill form',
     description: 'Fill multiple form fields at once',
     parameters: Type.Object({
@@ -276,6 +307,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_tabs',
+    exposure: 'deferred',
     label: 'Manage tabs',
     description: 'List, create, close, or select browser tabs',
     parameters: Type.Object({
@@ -292,6 +324,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_evaluate',
+    exposure: 'deferred',
     label: 'Evaluate JavaScript',
     description: 'Evaluate a JavaScript expression on the current page',
     parameters: Type.Object({
@@ -310,6 +343,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_wait_for',
+    exposure: 'deferred',
     label: 'Wait for',
     description: 'Wait for text to appear or disappear, or wait a specified number of seconds',
     parameters: Type.Object({
@@ -327,6 +361,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_close',
+    exposure: 'deferred',
     label: 'Close page',
     description: 'Close the current browser page',
     parameters: Type.Object({}),
@@ -338,6 +373,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_resize',
+    exposure: 'deferred',
     label: 'Resize window',
     description: 'Resize the browser window',
     parameters: Type.Object({
@@ -354,6 +390,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_mouse_move_xy',
+    exposure: 'deferred',
     label: 'Move mouse',
     description: 'Move mouse to an absolute x/y coordinate',
     parameters: Type.Object({
@@ -365,6 +402,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_mouse_click_xy',
+    exposure: 'deferred',
     label: 'Click at coordinates',
     description: 'Click at an absolute x/y coordinate. Prefer browser_click with a ref/selector when possible.',
     parameters: Type.Object({
@@ -379,6 +417,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_mouse_drag_xy',
+    exposure: 'deferred',
     label: 'Drag between coordinates',
     description: 'Drag from one x/y coordinate to another',
     parameters: Type.Object({
@@ -392,6 +431,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_mouse_down',
+    exposure: 'deferred',
     label: 'Mouse button down',
     description: 'Press and hold a mouse button',
     parameters: Type.Object({ button: Type.Optional(Type.String({ description: 'left, right, or middle' })) }),
@@ -400,6 +440,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_mouse_up',
+    exposure: 'deferred',
     label: 'Mouse button up',
     description: 'Release a mouse button',
     parameters: Type.Object({ button: Type.Optional(Type.String({ description: 'left, right, or middle' })) }),
@@ -408,6 +449,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_mouse_wheel',
+    exposure: 'deferred',
     label: 'Scroll',
     description: 'Scroll the mouse wheel by deltaX/deltaY pixels',
     parameters: Type.Object({
@@ -421,6 +463,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_console_messages',
+    exposure: 'deferred',
     label: 'Console messages',
     description: 'Return console messages from the current page. Useful for debugging errors.',
     parameters: Type.Object({
@@ -431,16 +474,46 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_console_clear',
+    exposure: 'deferred',
     label: 'Clear console',
     description: 'Clear recorded console messages',
     parameters: Type.Object({}),
     async execute(_id, params) { const r = await run('browser_console_clear')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
+  // ---------- DevTools ----------
+
+  pi.registerTool({
+    name: 'browser_devtools',
+    exposure: 'deferred',
+    label: 'Browser DevTools',
+    description: 'Get browser info or page metrics, or monitor runtime exceptions, network failures, and page lifecycle events.',
+    parameters: Type.Object({
+      action: Type.Union([
+        Type.Literal('info'),
+        Type.Literal('metrics'),
+        Type.Literal('monitor_start'),
+        Type.Literal('monitor_read'),
+        Type.Literal('monitor_stop'),
+      ], { description: 'DevTools operation to perform' }),
+      signals: Type.Optional(Type.Array(Type.Union([
+        Type.Literal('runtime'),
+        Type.Literal('network-failures'),
+        Type.Literal('lifecycle'),
+      ]), { description: 'monitor_start signals; defaults to all three', maxItems: 3 })),
+      monitorId: Type.Optional(Type.String({ description: 'Monitor ID returned by monitor_start' })),
+      maxEvents: Type.Optional(Type.Integer({ description: 'monitor_start ring-buffer size (default 200)', minimum: 1, maximum: 1000 })),
+      limit: Type.Optional(Type.Integer({ description: 'monitor_read maximum events (default 100)', minimum: 1, maximum: 500 })),
+      clear: Type.Optional(Type.Boolean({ description: 'monitor_read: remove returned events from the buffer' })),
+    }),
+    async execute(_id, params) { const r = await run('browser_devtools')(params as Params); return { content: r.content as any, details: r.details }; },
+  });
+
   // ---------- Dialogs ----------
 
   pi.registerTool({
     name: 'browser_handle_dialog',
+    exposure: 'deferred',
     label: 'Handle dialog',
     description: 'Accept or dismiss a browser dialog (alert, confirm, prompt)',
     parameters: Type.Object({
@@ -454,6 +527,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_file_upload',
+    exposure: 'deferred',
     label: 'Upload files',
     description: 'Upload files via an open file chooser. Trigger a file input first, then call this.',
     parameters: Type.Object({
@@ -466,6 +540,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_network_requests',
+    exposure: 'deferred',
     label: 'Network requests',
     description: 'List network requests made since last navigation. Useful for debugging API calls.',
     parameters: Type.Object({
@@ -479,6 +554,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_network_clear',
+    exposure: 'deferred',
     label: 'Clear network requests',
     description: 'Clear recorded network requests',
     parameters: Type.Object({}),
@@ -487,6 +563,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_network_state_set',
+    exposure: 'deferred',
     label: 'Set network state',
     description: 'Set the browser to online or offline mode',
     parameters: Type.Object({ state: Type.String({ description: 'online or offline' }) }),
@@ -497,6 +574,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_route',
+    exposure: 'deferred',
     label: 'Mock network requests',
     description: 'Intercept and mock network requests matching a URL pattern',
     parameters: Type.Object({
@@ -512,6 +590,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_route_list',
+    exposure: 'deferred',
     label: 'List routes',
     description: 'List all active network route mocks',
     parameters: Type.Object({}),
@@ -520,6 +599,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_unroute',
+    exposure: 'deferred',
     label: 'Remove routes',
     description: 'Remove network route mocks matching a pattern, or all if no pattern given',
     parameters: Type.Object({ pattern: Type.Optional(Type.String({ description: 'URL pattern to remove' })) }),
@@ -530,6 +610,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_cookie_list',
+    exposure: 'deferred',
     label: 'List cookies',
     description: 'List all cookies, optionally filtered by domain or path',
     parameters: Type.Object({
@@ -541,6 +622,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_cookie_get',
+    exposure: 'deferred',
     label: 'Get cookie',
     description: 'Get a specific cookie by name',
     parameters: Type.Object({ name: Type.String({ description: 'Cookie name' }) }),
@@ -549,6 +631,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_cookie_set',
+    exposure: 'deferred',
     label: 'Set cookie',
     description: 'Set a cookie',
     parameters: Type.Object({
@@ -566,6 +649,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_cookie_delete',
+    exposure: 'deferred',
     label: 'Delete cookie',
     description: 'Delete a specific cookie by name',
     parameters: Type.Object({ name: Type.String({ description: 'Cookie name' }) }),
@@ -574,6 +658,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_cookie_clear',
+    exposure: 'deferred',
     label: 'Clear cookies',
     description: 'Clear all cookies',
     parameters: Type.Object({}),
@@ -590,6 +675,7 @@ export default function (pi: ExtensionAPI) {
   ] as const) {
     pi.registerTool({
       name, label, description: desc,
+      exposure: 'deferred',
       parameters: Type.Object({}),
       async execute(_id, params) { const r = await run(name)(params as Params); return { content: r.content as any, details: r.details }; },
     });
@@ -603,6 +689,7 @@ export default function (pi: ExtensionAPI) {
   ] as const) {
     pi.registerTool({
       name, label, description: desc,
+      exposure: 'deferred',
       parameters: Type.Object({ key: Type.String({ description: `${store} key` }) }),
       async execute(_id, params) { const r = await run(name)(params as Params); return { content: r.content as any, details: r.details }; },
     });
@@ -614,6 +701,7 @@ export default function (pi: ExtensionAPI) {
   ] as const) {
     pi.registerTool({
       name, label, description: desc,
+      exposure: 'deferred',
       parameters: Type.Object({
         key: Type.String({ description: `${store} key` }),
         value: Type.String({ description: 'Value to set' }),
@@ -626,6 +714,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_storage_state',
+    exposure: 'deferred',
     label: 'Save storage state',
     description: 'Save cookies and localStorage to a JSON file',
     parameters: Type.Object({ filename: Type.Optional(Type.String({ description: 'File path to save to' })) }),
@@ -634,6 +723,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'browser_set_storage_state',
+    exposure: 'deferred',
     label: 'Restore storage state',
     description: 'Restore cookies and localStorage from a previously saved file',
     parameters: Type.Object({ filename: Type.String({ description: 'Path to storage state JSON file' }) }),
@@ -643,7 +733,7 @@ export default function (pi: ExtensionAPI) {
   // ---------- /browser command ----------
 
   pi.registerCommand('browser', {
-    description: 'Manage browser connection: connect [port], launch [browser], status, disconnect',
+    description: 'Manage browser connection: connect [port], launch [browser], isolated [browser], status, disconnect',
     handler: async (args, ctx) => {
       const parts = (args ?? '').trim().split(/\s+/).filter(Boolean);
       const sub = parts[0];
@@ -675,13 +765,25 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (sub === 'launch') {
-        const browserName = (parts[1] ?? 'chromium') as 'chromium' | 'firefox' | 'webkit';
-        ctx.ui.notify(`Launching ${browserName}...`, 'info');
         try {
-          await session.connect({ type: 'launch', browserName }, { timeouts: { action: 10000, navigation: 30000 } });
+          const browserName = parseBrowserName(parts[1]);
+          ctx.ui.notify(`Launching ${browserName}...`, 'info');
+          await connectBrowser({ type: 'launch', browserName }, ctx);
           ctx.ui.notify(`Launched ${browserName}.`, 'info');
         } catch (e: any) {
           ctx.ui.notify(`Launch failed: ${e.message}`, 'error');
+        }
+        return;
+      }
+
+      if (sub === 'isolated') {
+        try {
+          const browserName = parseBrowserName(parts[1]);
+          ctx.ui.notify(`Launching isolated ${browserName}...`, 'info');
+          await connectBrowser({ type: 'isolated', browserName }, ctx);
+          ctx.ui.notify(`Launched isolated ${browserName}.`, 'info');
+        } catch (e: any) {
+          ctx.ui.notify(`Isolated launch failed: ${e.message}`, 'error');
         }
         return;
       }
@@ -693,7 +795,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       ctx.ui.notify(
-        'Usage: /browser [connect [port] | launch [chromium|firefox|webkit] | status | disconnect]',
+        'Usage: /browser [connect [port] | launch [chromium|firefox|webkit] | isolated [chromium|firefox|webkit] | status | disconnect]',
         'info'
       );
     },

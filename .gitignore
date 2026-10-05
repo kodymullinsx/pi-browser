@@ -1,3 +1,6 @@
 node_modules/
 dist/
 *.js.map
+
+# Local Pi session task state
+.pi/todos/

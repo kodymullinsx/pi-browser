@@ -23,7 +23,7 @@
  *   browser_close, browser_resize
  */
 
-import type { ExtensionAPI, ExtensionCommandContext } from '@earendil-works/pi-coding-agent';
+import type { ExtensionAPI, ExtensionCommandContext, ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Type } from 'typebox';
@@ -100,68 +100,59 @@ export default function (pi: ExtensionAPI) {
     toolMap.set(t.schema.name, t);
   }
 
-  function run(name: string) {
-    const tool = toolMap.get(name)!;
-    return makeTool(session, tool);
+  // Every browser tool is registered here, so the shared execute wrapper and the
+  // deferred exposure setting have one owner. A name with no implementation fails
+  // at load instead of on the first call.
+  function register(def: Pick<ToolDefinition, 'name' | 'label' | 'description' | 'parameters'>) {
+    const tool = toolMap.get(def.name);
+    if (!tool) throw new Error(`No browser tool implementation for ${def.name}.`);
+    const run = makeTool(session, tool);
+    pi.registerTool({
+      ...def,
+      exposure: 'deferred',
+      async execute(_id, params) {
+        const r = await run(params as Params);
+        return { content: r.content as any, details: r.details };
+      },
+    });
   }
 
   // ---------- Navigation ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_navigate',
-    exposure: 'deferred',
     label: 'Navigate to URL',
     description: 'Navigate to a URL',
     parameters: Type.Object({ url: Type.String({ description: 'URL to navigate to' }) }),
-    async execute(_id, params) {
-      const r = await run('browser_navigate')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_navigate_back',
-    exposure: 'deferred',
     label: 'Go back',
     description: 'Go back to the previous page in the history',
     parameters: Type.Object({}),
-    async execute(_id, params) {
-      const r = await run('browser_navigate_back')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_reload',
-    exposure: 'deferred',
     label: 'Reload page',
     description: 'Reload the current page',
     parameters: Type.Object({}),
-    async execute(_id, params) {
-      const r = await run('browser_reload')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
   // ---------- Observation ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_snapshot',
-    exposure: 'deferred',
     label: 'Page snapshot',
     description: 'Capture the accessibility tree of the current page to find element refs for interaction. Do NOT call after every action to confirm results — check the snapshot included in action responses instead. Use selector param to scope to a specific section if the page is large.',
     parameters: Type.Object({
       selector: Type.Optional(Type.String({ description: 'CSS selector for partial snapshot' })),
     }) as any,
-    async execute(_id, params) {
-      const r = await run('browser_snapshot')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_take_screenshot',
-    exposure: 'deferred',
     label: 'Take screenshot',
     description: "Take a screenshot of the current page. Use browser_snapshot for interactions; use this to visually inspect.",
     parameters: Type.Object({
@@ -169,17 +160,12 @@ export default function (pi: ExtensionAPI) {
       selector: Type.Optional(Type.String({ description: 'CSS selector of element to screenshot' })),
       fullPage: Type.Optional(Type.Boolean({ description: 'Capture the full scrollable page' })),
     }),
-    async execute(_id, params) {
-      const r = await run('browser_take_screenshot')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
   // ---------- Interaction ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_click',
-    exposure: 'deferred',
     label: 'Click',
     description: 'Click an element on the page',
     parameters: Type.Object({
@@ -190,15 +176,10 @@ export default function (pi: ExtensionAPI) {
       button: Type.Optional(Type.String({ description: 'Mouse button: left, right, or middle' })),
       modifiers: Type.Optional(Type.Array(Type.String(), { description: 'Modifier keys: Alt, Control, Shift, Meta' })),
     }),
-    async execute(_id, params) {
-      const r = await run('browser_click')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_hover',
-    exposure: 'deferred',
     label: 'Hover',
     description: 'Hover over an element on the page',
     parameters: Type.Object({
@@ -206,15 +187,10 @@ export default function (pi: ExtensionAPI) {
       selector: Type.Optional(Type.String({ description: 'CSS selector' })),
       element: Type.Optional(Type.String({ description: 'Human-readable element description' })),
     }),
-    async execute(_id, params) {
-      const r = await run('browser_hover')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_select_option',
-    exposure: 'deferred',
     label: 'Select option',
     description: 'Select an option in a dropdown',
     parameters: Type.Object({
@@ -223,15 +199,10 @@ export default function (pi: ExtensionAPI) {
       element: Type.Optional(Type.String({ description: 'Human-readable element description' })),
       values: Type.Array(Type.String(), { description: 'Values to select' }),
     }),
-    async execute(_id, params) {
-      const r = await run('browser_select_option')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_drag',
-    exposure: 'deferred',
     label: 'Drag',
     description: 'Drag and drop between two elements',
     parameters: Type.Object({
@@ -242,17 +213,12 @@ export default function (pi: ExtensionAPI) {
       endSelector: Type.Optional(Type.String({ description: 'Target CSS selector' })),
       endElement: Type.Optional(Type.String({ description: 'Target element description' })),
     }),
-    async execute(_id, params) {
-      const r = await run('browser_drag')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
   // ---------- Input ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_type',
-    exposure: 'deferred',
     label: 'Type text',
     description: 'Type text into an editable element',
     parameters: Type.Object({
@@ -263,29 +229,19 @@ export default function (pi: ExtensionAPI) {
       submit: Type.Optional(Type.Boolean({ description: 'Press Enter after typing' })),
       slowly: Type.Optional(Type.Boolean({ description: 'Type one character at a time' })),
     }),
-    async execute(_id, params) {
-      const r = await run('browser_type')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_press_key',
-    exposure: 'deferred',
     label: 'Press key',
     description: 'Press a key on the keyboard',
     parameters: Type.Object({
       key: Type.String({ description: 'Key name such as ArrowLeft, Enter, or a character like a' }),
     }),
-    async execute(_id, params) {
-      const r = await run('browser_press_key')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_fill_form',
-    exposure: 'deferred',
     label: 'Fill form',
     description: 'Fill multiple form fields at once',
     parameters: Type.Object({
@@ -297,34 +253,24 @@ export default function (pi: ExtensionAPI) {
         value: Type.String({ description: 'Value to fill' }),
       }), { description: 'Fields to fill' }),
     }),
-    async execute(_id, params) {
-      const r = await run('browser_fill_form')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
   // ---------- Tabs ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_tabs',
-    exposure: 'deferred',
     label: 'Manage tabs',
     description: 'List, create, close, or select browser tabs',
     parameters: Type.Object({
       action: Type.String({ description: 'list, new, close, or select' }),
       index: Type.Optional(Type.Number({ description: 'Tab index for close/select' })),
     }),
-    async execute(_id, params) {
-      const r = await run('browser_tabs')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
   // ---------- Scripting ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_evaluate',
-    exposure: 'deferred',
     label: 'Evaluate JavaScript',
     description: 'Evaluate a JavaScript expression on the current page',
     parameters: Type.Object({
@@ -333,17 +279,12 @@ export default function (pi: ExtensionAPI) {
       selector: Type.Optional(Type.String({ description: 'CSS selector' })),
       element: Type.Optional(Type.String({ description: 'Human-readable element description' })),
     }),
-    async execute(_id, params) {
-      const r = await run('browser_evaluate')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
   // ---------- Waiting ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_wait_for',
-    exposure: 'deferred',
     label: 'Wait for',
     description: 'Wait for text to appear or disappear, or wait a specified number of seconds',
     parameters: Type.Object({
@@ -351,58 +292,41 @@ export default function (pi: ExtensionAPI) {
       text: Type.Optional(Type.String({ description: 'Text to wait to appear' })),
       textGone: Type.Optional(Type.String({ description: 'Text to wait to disappear' })),
     }),
-    async execute(_id, params) {
-      const r = await run('browser_wait_for')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
   // ---------- Window ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_close',
-    exposure: 'deferred',
     label: 'Close page',
     description: 'Close the current browser page',
     parameters: Type.Object({}),
-    async execute(_id, params) {
-      const r = await run('browser_close')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_resize',
-    exposure: 'deferred',
     label: 'Resize window',
     description: 'Resize the browser window',
     parameters: Type.Object({
       width: Type.Number({ description: 'Width in pixels' }),
       height: Type.Number({ description: 'Height in pixels' }),
     }),
-    async execute(_id, params) {
-      const r = await run('browser_resize')(params as Params);
-      return { content: r.content as any, details: r.details };
-    },
   });
 
   // ---------- Mouse ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_mouse_move_xy',
-    exposure: 'deferred',
     label: 'Move mouse',
     description: 'Move mouse to an absolute x/y coordinate',
     parameters: Type.Object({
       x: Type.Number({ description: 'X coordinate' }),
       y: Type.Number({ description: 'Y coordinate' }),
     }),
-    async execute(_id, params) { const r = await run('browser_mouse_move_xy')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_mouse_click_xy',
-    exposure: 'deferred',
     label: 'Click at coordinates',
     description: 'Click at an absolute x/y coordinate. Prefer browser_click with a ref/selector when possible.',
     parameters: Type.Object({
@@ -412,12 +336,10 @@ export default function (pi: ExtensionAPI) {
       clickCount: Type.Optional(Type.Number({ description: 'Number of clicks' })),
       delay: Type.Optional(Type.Number({ description: 'Delay between mousedown and mouseup in ms' })),
     }),
-    async execute(_id, params) { const r = await run('browser_mouse_click_xy')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_mouse_drag_xy',
-    exposure: 'deferred',
     label: 'Drag between coordinates',
     description: 'Drag from one x/y coordinate to another',
     parameters: Type.Object({
@@ -426,66 +348,54 @@ export default function (pi: ExtensionAPI) {
       endX: Type.Number({ description: 'End X' }),
       endY: Type.Number({ description: 'End Y' }),
     }),
-    async execute(_id, params) { const r = await run('browser_mouse_drag_xy')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_mouse_down',
-    exposure: 'deferred',
     label: 'Mouse button down',
     description: 'Press and hold a mouse button',
     parameters: Type.Object({ button: Type.Optional(Type.String({ description: 'left, right, or middle' })) }),
-    async execute(_id, params) { const r = await run('browser_mouse_down')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_mouse_up',
-    exposure: 'deferred',
     label: 'Mouse button up',
     description: 'Release a mouse button',
     parameters: Type.Object({ button: Type.Optional(Type.String({ description: 'left, right, or middle' })) }),
-    async execute(_id, params) { const r = await run('browser_mouse_up')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_mouse_wheel',
-    exposure: 'deferred',
     label: 'Scroll',
     description: 'Scroll the mouse wheel by deltaX/deltaY pixels',
     parameters: Type.Object({
       deltaX: Type.Optional(Type.Number({ description: 'Horizontal scroll amount' })),
       deltaY: Type.Optional(Type.Number({ description: 'Vertical scroll amount' })),
     }),
-    async execute(_id, params) { const r = await run('browser_mouse_wheel')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
   // ---------- Console ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_console_messages',
-    exposure: 'deferred',
     label: 'Console messages',
     description: 'Return console messages from the current page. Useful for debugging errors.',
     parameters: Type.Object({
       level: Type.Optional(Type.String({ description: 'Minimum level to return: error, warning, info, debug (default: info)' })),
     }),
-    async execute(_id, params) { const r = await run('browser_console_messages')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_console_clear',
-    exposure: 'deferred',
     label: 'Clear console',
     description: 'Clear recorded console messages',
     parameters: Type.Object({}),
-    async execute(_id, params) { const r = await run('browser_console_clear')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
   // ---------- DevTools ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_devtools',
-    exposure: 'deferred',
     label: 'Browser DevTools',
     description: 'Get browser info or page metrics, or monitor runtime exceptions, network failures, and page lifecycle events.',
     parameters: Type.Object({
@@ -506,41 +416,35 @@ export default function (pi: ExtensionAPI) {
       limit: Type.Optional(Type.Integer({ description: 'monitor_read maximum events (default 100)', minimum: 1, maximum: 500 })),
       clear: Type.Optional(Type.Boolean({ description: 'monitor_read: remove returned events from the buffer' })),
     }),
-    async execute(_id, params) { const r = await run('browser_devtools')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
   // ---------- Dialogs ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_handle_dialog',
-    exposure: 'deferred',
     label: 'Handle dialog',
     description: 'Accept or dismiss a browser dialog (alert, confirm, prompt)',
     parameters: Type.Object({
       accept: Type.Boolean({ description: 'true to accept, false to dismiss' }),
       promptText: Type.Optional(Type.String({ description: 'Text to enter for prompt dialogs' })),
     }),
-    async execute(_id, params) { const r = await run('browser_handle_dialog')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
   // ---------- Files ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_file_upload',
-    exposure: 'deferred',
     label: 'Upload files',
     description: 'Upload files via an open file chooser. Trigger a file input first, then call this.',
     parameters: Type.Object({
       paths: Type.Optional(Type.Array(Type.String(), { description: 'Absolute paths to files to upload' })),
     }),
-    async execute(_id, params) { const r = await run('browser_file_upload')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
   // ---------- Network ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_network_requests',
-    exposure: 'deferred',
     label: 'Network requests',
     description: 'List network requests made since last navigation. Useful for debugging API calls.',
     parameters: Type.Object({
@@ -549,32 +453,26 @@ export default function (pi: ExtensionAPI) {
       requestHeaders: Type.Optional(Type.Boolean({ description: 'Include request headers. Default: false' })),
       filter: Type.Optional(Type.String({ description: 'Regex to filter URLs (e.g. "/api/.*user")' })),
     }),
-    async execute(_id, params) { const r = await run('browser_network_requests')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_network_clear',
-    exposure: 'deferred',
     label: 'Clear network requests',
     description: 'Clear recorded network requests',
     parameters: Type.Object({}),
-    async execute(_id, params) { const r = await run('browser_network_clear')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_network_state_set',
-    exposure: 'deferred',
     label: 'Set network state',
     description: 'Set the browser to online or offline mode',
     parameters: Type.Object({ state: Type.String({ description: 'online or offline' }) }),
-    async execute(_id, params) { const r = await run('browser_network_state_set')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
   // ---------- Routes ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_route',
-    exposure: 'deferred',
     label: 'Mock network requests',
     description: 'Intercept and mock network requests matching a URL pattern',
     parameters: Type.Object({
@@ -585,53 +483,43 @@ export default function (pi: ExtensionAPI) {
       headers: Type.Optional(Type.Array(Type.String(), { description: 'Headers to add in "Name: Value" format' })),
       removeHeaders: Type.Optional(Type.String({ description: 'Comma-separated header names to remove' })),
     }),
-    async execute(_id, params) { const r = await run('browser_route')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_route_list',
-    exposure: 'deferred',
     label: 'List routes',
     description: 'List all active network route mocks',
     parameters: Type.Object({}),
-    async execute(_id, params) { const r = await run('browser_route_list')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_unroute',
-    exposure: 'deferred',
     label: 'Remove routes',
     description: 'Remove network route mocks matching a pattern, or all if no pattern given',
     parameters: Type.Object({ pattern: Type.Optional(Type.String({ description: 'URL pattern to remove' })) }),
-    async execute(_id, params) { const r = await run('browser_unroute')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
   // ---------- Cookies ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_cookie_list',
-    exposure: 'deferred',
     label: 'List cookies',
     description: 'List all cookies, optionally filtered by domain or path',
     parameters: Type.Object({
       domain: Type.Optional(Type.String({ description: 'Filter by domain' })),
       path: Type.Optional(Type.String({ description: 'Filter by path' })),
     }),
-    async execute(_id, params) { const r = await run('browser_cookie_list')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_cookie_get',
-    exposure: 'deferred',
     label: 'Get cookie',
     description: 'Get a specific cookie by name',
     parameters: Type.Object({ name: Type.String({ description: 'Cookie name' }) }),
-    async execute(_id, params) { const r = await run('browser_cookie_get')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_cookie_set',
-    exposure: 'deferred',
     label: 'Set cookie',
     description: 'Set a cookie',
     parameters: Type.Object({
@@ -644,25 +532,20 @@ export default function (pi: ExtensionAPI) {
       secure: Type.Optional(Type.Boolean()),
       sameSite: Type.Optional(Type.String({ description: 'Strict, Lax, or None' })),
     }),
-    async execute(_id, params) { const r = await run('browser_cookie_set')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_cookie_delete',
-    exposure: 'deferred',
     label: 'Delete cookie',
     description: 'Delete a specific cookie by name',
     parameters: Type.Object({ name: Type.String({ description: 'Cookie name' }) }),
-    async execute(_id, params) { const r = await run('browser_cookie_delete')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_cookie_clear',
-    exposure: 'deferred',
     label: 'Clear cookies',
     description: 'Clear all cookies',
     parameters: Type.Object({}),
-    async execute(_id, params) { const r = await run('browser_cookie_clear')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
   // ---------- localStorage ----------
@@ -673,11 +556,9 @@ export default function (pi: ExtensionAPI) {
     ['browser_sessionstorage_list', 'List sessionStorage', 'List all sessionStorage key-value pairs'],
     ['browser_sessionstorage_clear', 'Clear sessionStorage', 'Clear all sessionStorage'],
   ] as const) {
-    pi.registerTool({
+    register({
       name, label, description: desc,
-      exposure: 'deferred',
       parameters: Type.Object({}),
-      async execute(_id, params) { const r = await run(name)(params as Params); return { content: r.content as any, details: r.details }; },
     });
   }
 
@@ -687,11 +568,9 @@ export default function (pi: ExtensionAPI) {
     ['browser_sessionstorage_get', 'Get sessionStorage item', 'Get a sessionStorage item by key', 'sessionStorage'],
     ['browser_sessionstorage_delete', 'Delete sessionStorage item', 'Delete a sessionStorage item', 'sessionStorage'],
   ] as const) {
-    pi.registerTool({
+    register({
       name, label, description: desc,
-      exposure: 'deferred',
       parameters: Type.Object({ key: Type.String({ description: `${store} key` }) }),
-      async execute(_id, params) { const r = await run(name)(params as Params); return { content: r.content as any, details: r.details }; },
     });
   }
 
@@ -699,35 +578,29 @@ export default function (pi: ExtensionAPI) {
     ['browser_localstorage_set', 'Set localStorage item', 'Set a localStorage item', 'localStorage'],
     ['browser_sessionstorage_set', 'Set sessionStorage item', 'Set a sessionStorage item', 'sessionStorage'],
   ] as const) {
-    pi.registerTool({
+    register({
       name, label, description: desc,
-      exposure: 'deferred',
       parameters: Type.Object({
         key: Type.String({ description: `${store} key` }),
         value: Type.String({ description: 'Value to set' }),
       }),
-      async execute(_id, params) { const r = await run(name)(params as Params); return { content: r.content as any, details: r.details }; },
     });
   }
 
   // ---------- Storage state ----------
 
-  pi.registerTool({
+  register({
     name: 'browser_storage_state',
-    exposure: 'deferred',
     label: 'Save storage state',
     description: 'Save cookies and localStorage to a JSON file',
     parameters: Type.Object({ filename: Type.Optional(Type.String({ description: 'File path to save to' })) }),
-    async execute(_id, params) { const r = await run('browser_storage_state')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
-  pi.registerTool({
+  register({
     name: 'browser_set_storage_state',
-    exposure: 'deferred',
     label: 'Restore storage state',
     description: 'Restore cookies and localStorage from a previously saved file',
     parameters: Type.Object({ filename: Type.String({ description: 'Path to storage state JSON file' }) }),
-    async execute(_id, params) { const r = await run('browser_set_storage_state')(params as Params); return { content: r.content as any, details: r.details }; },
   });
 
   // ---------- /browser command ----------

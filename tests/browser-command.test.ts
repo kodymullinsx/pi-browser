@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const playwright = vi.hoisted(() => {
@@ -29,6 +30,12 @@ vi.mock('playwright', () => ({
 }));
 
 import browserControl from '../index';
+
+const toolModules = import.meta.glob<{ default: Array<{ schema: { name: string } }> }>(
+  '../src/tools/*.ts',
+  { eager: true },
+);
+const extensionRoot = path.resolve(import.meta.dirname, '..');
 
 const missingExecutable = new Error(
   "browserType.launchPersistentContext: Executable doesn't exist at /cache/chromium/chrome\n" +
@@ -63,6 +70,19 @@ beforeEach(() => {
 });
 
 describe('browser-control registration', () => {
+  it('registers every implemented tool exactly once, all with deferred exposure', () => {
+    const { registerTool } = loadExtension({ stdout: '', stderr: '', code: 0, killed: false });
+    const definitions = registerTool.mock.calls.map(([definition]) => definition);
+    const registered = definitions.map(definition => definition.name);
+    const implemented = Object.values(toolModules)
+      .flatMap(module => module.default)
+      .map(tool => tool.schema.name);
+
+    expect(new Set(registered).size).toBe(registered.length);
+    expect([...registered].sort()).toEqual([...implemented].sort());
+    expect(definitions.filter(definition => definition.exposure !== 'deferred')).toEqual([]);
+  });
+
   it('registers one compact browser_devtools surface', () => {
     const { registerTool } = loadExtension({ stdout: '', stderr: '', code: 0, killed: false });
 
@@ -102,15 +122,8 @@ describe('/browser launch provisioning', () => {
     expect(exec).toHaveBeenCalledOnce();
     expect(exec).toHaveBeenCalledWith(
       process.execPath,
-      [
-        expect.stringMatching(/browser-control\/node_modules\/playwright\/cli\.js$/),
-        'install',
-        'chromium',
-      ],
-      {
-        cwd: expect.stringMatching(/browser-control$/),
-        timeout: 600000,
-      },
+      [path.join(extensionRoot, 'node_modules', 'playwright', 'cli.js'), 'install', 'chromium'],
+      { cwd: extensionRoot, timeout: 600000 },
     );
     expect(playwright.launchPersistentContext).toHaveBeenCalledTimes(2);
     expect(notify).toHaveBeenLastCalledWith('Launched chromium.', 'info');

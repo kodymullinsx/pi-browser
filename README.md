@@ -25,7 +25,7 @@ npm test                 # TypeScript check and unit tests; needs no live Pi
 npm run test:loader      # Live Pi version guard, then registration through the installed Pi CLI
 ```
 
-The current gate accepts only `@earendil-works/pi-coding-agent@1.0.0` for both the
+The current gate accepts only `@earendil-works/pi-coding-agent@1.0.3` for both the
 TypeScript SDK and active `pi` CLI. The peer dependency and development SDK are pinned to that
 exact version. `test:loader` compares that pin, the declaration package TypeScript resolves, and
 the active `pi` CLI, and fails when any of them differ. It ignores

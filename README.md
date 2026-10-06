@@ -25,9 +25,10 @@ npm test                 # TypeScript check and unit tests; needs no live Pi
 npm run test:loader      # Live Pi version guard, then registration through the installed Pi CLI
 ```
 
-The Pi development dependency is pinned to an exact version so TypeScript checks the
-extension against a known SDK. `test:loader` compares that pin, the declaration package
-TypeScript resolves, and the active `pi` CLI, and fails when any of them differ. It ignores
+The current gate accepts only `@earendil-works/pi-coding-agent@1.0.0` for both the
+TypeScript SDK and active `pi` CLI. The peer dependency and development SDK are pinned to that
+exact version. `test:loader` compares that pin, the declaration package TypeScript resolves, and
+the active `pi` CLI, and fails when any of them differ. It ignores
 npm-injected `node_modules/.bin` paths so it cannot compare the local Pi copy with itself.
 When it reports a mismatch after a harness upgrade, run the install command in its message,
 update `peerDependencies` if the supported range changes, and rerun both commands.

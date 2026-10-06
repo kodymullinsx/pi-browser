@@ -41,6 +41,10 @@ function checkAgainstLivePackage(packageVersion: string, cliVersion = packageVer
 }
 
 describe('browser Pi compatibility guard', () => {
+  it('declares only the exact SDK version accepted by the loader guard', () => {
+    expect(manifest.peerDependencies['@earendil-works/pi-coding-agent']).toBe(version);
+  });
+
   it('accepts the exact live version and reports the actual TypeScript declaration path', () => {
     const result = checkAgainstLivePackage(version);
     expect(result.error).toBeUndefined();

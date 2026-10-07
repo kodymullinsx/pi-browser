@@ -2,7 +2,8 @@ import { defineTool, defineTabTool } from '../tool';
 
 export const close = defineTool({
   schema: { name: 'browser_close' },
-  handle: async (_context, _params, result) => {
+  handle: async (context, _params, result) => {
+    await context.closeTab(undefined);
     result.addCode('await page.close();');
     result.setClose();
     result.addTextResult('Page closed.');

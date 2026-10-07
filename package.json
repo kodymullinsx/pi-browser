@@ -26,11 +26,11 @@
     "playwright": "1.63.0"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "1.0.3",
+    "@earendil-works/pi-coding-agent": "1.0.4",
     "typebox": "*"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "1.0.3",
+    "@earendil-works/pi-coding-agent": "1.0.4",
     "@types/node": "^22.0.0",
     "typebox": "^1.3.6",
     "typescript": "^5.9.3",

@@ -13,20 +13,35 @@ afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
-function checkAgainstLivePackage(packageVersion: string, cliVersion = packageVersion, npmPath = false) {
+function checkAgainstLivePackage(packageVersion: string, cliVersion = packageVersion, npmPath = false, managed = false, schemaVersion = 1) {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'browser-pi-version-'));
   temporaryDirectories.push(directory);
   const bin = path.join(directory, 'bin');
-  const packageRoot = path.join(directory, 'pi-package');
+  const installRoot = path.join(directory, 'agent', 'install');
+  const packageRoot = managed
+    ? path.join(installRoot, 'releases', packageVersion, 'node_modules/@earendil-works/pi-coding-agent')
+    : path.join(directory, 'pi-package');
   mkdirSync(bin);
   mkdirSync(path.join(packageRoot, 'dist'), { recursive: true });
   writeFileSync(path.join(packageRoot, 'package.json'), JSON.stringify({
-    name: '@earendil-works/pi-coding-agent', version: packageVersion,
+    name: '@earendil-works/pi-coding-agent', version: packageVersion, bin: { pi: 'dist/cli' },
   }));
   const cli = path.join(packageRoot, 'dist', 'cli');
   writeFileSync(cli, `#!/bin/sh\nprintf '%s\\n' '${cliVersion}'\n`);
   chmodSync(cli, 0o755);
-  symlinkSync(cli, path.join(bin, 'pi'));
+  if (managed) {
+    const launcher = path.join(directory, 'agent', 'bin', 'pi');
+    mkdirSync(path.dirname(launcher), { recursive: true });
+    writeFileSync(path.join(installRoot, 'managed-install.json'), JSON.stringify({
+      kind: 'pi-managed-install', schemaVersion, layout: 'releases-v1',
+    }));
+    writeFileSync(path.join(installRoot, 'current-version'), `${packageVersion}\n`);
+    writeFileSync(launcher, `#!/bin/sh\nexec '${cli}' "$@"\n`);
+    chmodSync(launcher, 0o755);
+    symlinkSync(launcher, path.join(bin, 'pi'));
+  } else {
+    symlinkSync(cli, path.join(bin, 'pi'));
+  }
 
   return spawnSync(process.execPath, [path.join(root, 'scripts/check-pi-version.mjs')], {
     cwd: directory,
@@ -41,6 +56,28 @@ function checkAgainstLivePackage(packageVersion: string, cliVersion = packageVer
 }
 
 describe('browser Pi compatibility guard', () => {
+  it('accepts a managed launcher and reports its actual selected package CLI', () => {
+    const result = checkAgainstLivePackage(version, version, false, true);
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain(`live=${version} types=${version} pin=${version}`);
+    expect(result.stdout).toContain(`/install/releases/${version}/node_modules/@earendil-works/pi-coding-agent/dist/cli`);
+  });
+
+  it('rejects a managed launcher whose actual CLI version differs from its selected package', () => {
+    const result = checkAgainstLivePackage(version, '999.0.0', false, true);
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Pi launcher/package version mismatch');
+  });
+
+  it('fails closed on an unsupported managed install marker', () => {
+    const result = checkAgainstLivePackage(version, version, false, true, 2);
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Unsupported Pi managed install marker');
+  });
+
   it('declares only the exact SDK version accepted by the loader guard', () => {
     expect(manifest.peerDependencies['@earendil-works/pi-coding-agent']).toBe(version);
   });

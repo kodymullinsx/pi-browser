@@ -22,6 +22,33 @@ function findPiPackage(entry) {
   }
 }
 
+// The official managed install uses a shell launcher outside the npm package.
+// Resolve its selected release before checking the actual launcher version.
+function findLivePiPackage(entry) {
+  const launcher = realpathSync(entry);
+  const installRoot = path.resolve(path.dirname(launcher), '../install');
+  const markerPath = path.join(installRoot, 'managed-install.json');
+  if (!existsSync(markerPath)) return { ...findPiPackage(entry), cliPath: launcher };
+
+  const marker = JSON.parse(readFileSync(markerPath, 'utf8'));
+  assert.ok(
+    marker.kind === 'pi-managed-install' && marker.schemaVersion === 1 && marker.layout === 'releases-v1',
+    'Unsupported Pi managed install marker',
+  );
+  const selectedVersion = readFileSync(path.join(installRoot, 'current-version'), 'utf8').trim();
+  assert.ok(
+    /^[A-Za-z0-9._+-]+$/.test(selectedVersion) && !['.', '..'].includes(selectedVersion),
+    'Invalid Pi managed release version',
+  );
+  const directory = path.join(installRoot, 'releases', selectedVersion, 'node_modules', packageName);
+  const manifest = JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8'));
+  assert.equal(manifest.name, packageName, 'Managed release is not the Pi package');
+  assert.equal(manifest.version, selectedVersion, 'Managed release/package version mismatch');
+  const bin = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.pi;
+  assert.equal(typeof bin, 'string', 'Managed Pi package has no CLI entrypoint');
+  return { directory, manifest, cliPath: realpathSync(path.join(directory, bin)) };
+}
+
 /**
  * Compare the live Pi CLI with the Pi declaration package TypeScript resolves and the
  * exact devDependency pin. Throws on any mismatch; returns the live CLI path.
@@ -53,7 +80,7 @@ export function checkLivePi() {
   } catch {
     assert.fail('No live `pi` command found on PATH; the compatibility guard compares against the installed Pi.');
   }
-  const livePackage = findPiPackage(piBin);
+  const livePackage = findLivePiPackage(piBin);
   const cliVersion = execFileSync(piBin, ['--version'], {
     encoding: 'utf8', timeout: 10_000,
   }).trim();
@@ -68,7 +95,7 @@ export function checkLivePi() {
   );
   assert.equal(declaredVersion, cliVersion, 'Pin the browser Pi devDependency to the exact live version');
   console.log(`[pi-version] live=${cliVersion} types=${typesPackage.manifest.version} pin=${declaredVersion}`);
-  console.log(`[pi-version] CLI: ${realpathSync(piBin)}`);
+  console.log(`[pi-version] CLI: ${livePackage.cliPath}`);
   console.log(`[pi-version] TypeScript: ${resolved.resolvedFileName}`);
   return { piBin };
 }

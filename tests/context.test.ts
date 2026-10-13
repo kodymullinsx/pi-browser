@@ -79,6 +79,17 @@ describe('Context', () => {
       expect((await result.build()).details).toEqual({ tabs: [], isClose: true });
     });
 
+    it('succeeds when no page is open', async () => {
+      const ctx = new Context(makeBrowserContext([]) as any);
+      const result = new BrowserToolResult(ctx);
+
+      await close.handle(ctx, {}, result);
+
+      const response = await result.build();
+      expect(response.details).toEqual({ tabs: [], isClose: true });
+      expect(response.content).toEqual([{ type: 'text', text: expect.stringContaining('No page was open.') }]);
+    });
+
     it('waits for page closure before reporting success', async () => {
       const page = makePage('https://pending.test');
       const finishClose = page.close;
